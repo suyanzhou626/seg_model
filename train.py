@@ -93,7 +93,8 @@ class Trainer(object):
         self.model.train()
         num_img_tr = len(self.train_loader)
         print('Training')
-        for i, sample in enumerate(self.train_loader):
+        i = 0
+        for sample in self.train_loader:
             image, target = sample['image'], sample['label']
             if self.args.cuda:
                 image, target = image.cuda(), target.cuda()
@@ -111,13 +112,16 @@ class Trainer(object):
             self.optimizer.step()
             train_loss += loss.item()
             if i % 10 == 0:
+                print('====>Iteration  %d/%d' % (i,num_img_tr))
                 print('Train loss: %.3f' % (train_loss / (i + 1)))
+            
             self.writer.add_scalar('train/total_loss_iter', loss.item(), i + num_img_tr * epoch)
 
             # Show 10 * 3 inference results each epoch
             if i % (num_img_tr // 10) == 0:
                 global_step = i + num_img_tr * epoch
                 self.summary.visualize_image(self.writer, self.args.dataset, image, target, output, global_step)
+            i += 1
 
         self.writer.add_scalar('train/total_loss_epoch', train_loss, epoch)
         print('[Epoch: %d, numImages: %5d]' % (epoch, i * self.args.batch_size + image.data.shape[0]))
@@ -129,6 +133,7 @@ class Trainer(object):
         self.evaluator.reset()
         test_loss = 0.0
         print('Validation')
+        num_img_tr = len(self.val_loader)
         for i, sample in enumerate(self.val_loader):
             image, target = sample['image'], sample['label']
             if self.args.cuda:
@@ -141,8 +146,8 @@ class Trainer(object):
                     output = self.model(image)
                     loss = self.criterion(output, target)
             test_loss += loss.item()
-            if i % 10 == 0:
-                print('test loss: %.3f' % (test_loss / (i + 1)))
+            print('====>Iteration  %d/%d' % (i,num_img_tr))
+            print('test loss: %.3f' % (test_loss / (i + 1)))
             pred = output.data.cpu().numpy()
             target = target.cpu().numpy()
             pred = np.argmax(pred, axis=1)
@@ -241,7 +246,7 @@ def main():
     args.network = network_map[args.backbone]
     args.cuda = not args.no_cuda and torch.cuda.is_available()    
     args.gpus = torch.cuda.device_count()
-    print("\ntorch.cuda.device_count()=",args.gpus)
+    print("torch.cuda.device_count()=",args.gpus)
     # if args.test_batch_size is None:
     #     args.test_batch_size = args.batch_size
     if args.checkname is None:
