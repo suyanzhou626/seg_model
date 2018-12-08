@@ -1,7 +1,6 @@
 import argparse
 import os
 import numpy as np
-from tqdm import tqdm
 import torch
 
 from modeling.v23 import V23_4x
@@ -36,7 +35,7 @@ class Trainer(object):
 
         train_params = [{'params': model.get_conv_weight_params(), 'lr': args.lr,'weight_decay':args.weight_decay},
                         {'params': model.get_conv_bias_params(), 'lr': args.lr * 2,'weight_decay':0},
-                        {'params': model.get_bn_params(),'lr': args.lr,'weight_decay':0}]
+                        {'params': model.get_bn_prelu_params(),'lr': args.lr,'weight_decay':0}]
         # train_params = [{'params':model.parameters(),'lr':args.lr}]
 
         # Define Optimizer
@@ -92,9 +91,9 @@ class Trainer(object):
     def training(self, epoch):
         train_loss = 0.0
         self.model.train()
-        tbar = tqdm(self.train_loader)
         num_img_tr = len(self.train_loader)
-        for i, sample in enumerate(tbar):
+        print('Training')
+        for i, sample in enumerate(self.train_loader):
             image, target = sample['image'], sample['label']
             if self.args.cuda:
                 image, target = image.cuda(), target.cuda()
@@ -111,7 +110,8 @@ class Trainer(object):
             loss.backward()
             self.optimizer.step()
             train_loss += loss.item()
-            tbar.set_description('Train loss: %.3f' % (train_loss / (i + 1)))
+            if i % 10 == 0:
+                print('Train loss: %.3f' % (train_loss / (i + 1)))
             self.writer.add_scalar('train/total_loss_iter', loss.item(), i + num_img_tr * epoch)
 
             # Show 10 * 3 inference results each epoch
@@ -127,10 +127,9 @@ class Trainer(object):
     def validation(self, epoch):
         self.model.eval()
         self.evaluator.reset()
-        tbar = tqdm(self.val_loader, desc='\r')
         test_loss = 0.0
-        print('Validation \n')
-        for i, sample in enumerate(tbar):
+        print('Validation')
+        for i, sample in enumerate(self.val_loader):
             image, target = sample['image'], sample['label']
             if self.args.cuda:
                 image, target = image.cuda(), target.cuda()
@@ -142,7 +141,8 @@ class Trainer(object):
                     output = self.model(image)
                     loss = self.criterion(output, target)
             test_loss += loss.item()
-            tbar.set_description('test loss: %.3f' % (test_loss / (i + 1)))
+            if i % 10 == 0:
+                print('test loss: %.3f' % (test_loss / (i + 1)))
             pred = output.data.cpu().numpy()
             target = target.cpu().numpy()
             pred = np.argmax(pred, axis=1)
@@ -159,7 +159,7 @@ class Trainer(object):
         self.writer.add_scalar('val/Acc', Acc, epoch)
         self.writer.add_scalar('val/Acc_class', Acc_class, epoch)
         self.writer.add_scalar('val/fwIoU', FWIoU, epoch)
-        print('\n[Epoch: %d, numImages: %5d]' % (epoch, i * self.args.batch_size + image.data.shape[0]))
+        print('[Epoch: %d, numImages: %5d]' % (epoch, i * self.args.batch_size + image.data.shape[0]))
         print("Acc:{}, Acc_class:{}, mIoU:{}, fwIoU: {}".format(Acc, Acc_class, mIoU, FWIoU))
         print('Loss: %.3f\n\n' % test_loss)
 

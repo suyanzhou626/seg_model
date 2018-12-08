@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-from tqdm import trange
 import os
 from torchvision import transforms
 from dataloaders import custom_transforms as tr

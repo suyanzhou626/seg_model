@@ -11,7 +11,7 @@ FC_BLOCK={'layers':3,'planes':[48,64,64,64],'k_sizes':[1,1,1],'strides':[1,1,1],
 
 def conv_bn_relu(inplane,outplane,k_size,stride=1,pad=0,dilation=1):
     block = nn.Sequential(OrderedDict([('conv',nn.Conv2d(inplane,outplane,k_size,stride=stride,padding=pad,dilation=dilation)),
-    ('bn',nn.BatchNorm2d(outplane)),('prelu',nn.PReLU())]))
+    ('bn',nn.BatchNorm2d(outplane)),('prelu',nn.PReLU(outplane))]))
     return block
 
 class Block(nn.Module):
@@ -85,9 +85,9 @@ class V23_4x(nn.Module):
                             yield p[1]
 
 
-    def get_bn_params(self):
+    def get_bn_prelu_params(self):
         for m in self.named_modules():
-            if isinstance(m[1],nn.BatchNorm2d):
+            if isinstance(m[1],nn.BatchNorm2d) or isinstance(m[1],nn.PReLU):
                 for p in m[1].parameters():
                     if p.requires_grad:
                         yield p
