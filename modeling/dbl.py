@@ -7,8 +7,8 @@ BLOCK_PARAMETER=[{'layers':2,'planes':[3,8,12],'k_sizes':[2,3],'strides':[2,2],'
                  {'layers':4,'planes':[12,24,24,24,24],'k_sizes':[3,3,3,3],'strides':[2,1,1,1],'pads':[1,1,1,1],'dilations':[1,1,1,1]},
                  {'layers':3,'planes':[24,32,32,32],'k_sizes':[3,3,3],'strides':[2,1,1],'pads':[1,1,1],'dilations':[1,1,1]},
                  {'layers':4,'planes':[32,32,32,32,48],'k_sizes':[3,3,3,3],'strides':[1,1,1,1],'pads':[1,1,1,1],'dilations':[1,1,1,1]},
-                 {'layers':3,'planes':[18,8,12,2],'k_sizes':[3,3,3],'strides':[1,1,1],'pads':[1,1,1],'dilations':[1,1,1]}]
-FC_BLOCK={'layers':5,'planes':[48,48,64,64,64,2],'k_sizes':[3,1,1,1,1],'strides':[1,1,1,1,1],'pads':[0,0,0,0,0],'dilations':[1,1,1,1,1]}
+                 {'layers':2,'planes':[18,8,12],'k_sizes':[3,3],'strides':[1,1],'pads':[1,1],'dilations':[1,1]}]
+FC_BLOCK={'layers':4,'planes':[48,48,64,64,64],'k_sizes':[3,1,1,1],'strides':[1,1,1,1],'pads':[0,0,0,0],'dilations':[1,1,1,1]}
 
 # DECONV_PARAMETER=[{'layers':2,'planes':[512,128,128],'k_sizes':[3,3],'strides':[1,1],'pads':[1,1],'dilations':[1,1]},
 #                   {'layers':2,'planes':[256,64,64],'k_sizes':[3,3],'strides':[1,1],'pads':[1,1],'dilations':[1,1]},
@@ -55,9 +55,7 @@ class Dbl(nn.Module):
         super().__init__()
         self.block_parameter = BLOCK_PARAMETER if block_parameter is None else block_parameter
         self.fcblock_parameter = FC_BLOCK if fcblock_parameter is None else fcblock_parameter 
-        self.block_parameter[-1]['planes'][-1]=nclasses
         self.block_parameter[-1]['planes'][0]=3*nclasses+self.block_parameter[0]['planes'][-1]
-        self.fcblock_parameter['planes'][-1]=nclasses
         # self.deconv_parameter = DECONV_PARAMETER
         self.block1 = Block(**self.block_parameter[0])
         self.block2 = Block(**self.block_parameter[1])
@@ -69,9 +67,11 @@ class Dbl(nn.Module):
         # self.deconvbblock3 = DeconvBlock(**self.deconv_parameter[2])
         # self.deconvbblock4 = DeconvBlock(**self.deconv_parameter[3])
         self.fc_block = Block(**self.fcblock_parameter)
+        self.fcblock_nconv = nn.Conv2d(self.fcblock_parameter['planes'][-1],nclasses,1,padding=0)
         self.last_block = Block(**self.block_parameter[5])
         self.branch = conv_bn_relu(self.block_parameter[1]['planes'][-1],nclasses,1)
         self.fc_conv = nn.Conv2d(2*nclasses,nclasses,3,stride=1,padding=1)
+        self.last_conv = nn.Conv2d(self.block_parameter[-1]['planes'][-1],nclasses,3,stride=1,padding=1)
         for m in self.modules():
             classname = m.__class__.__name__
             if classname.find('Conv2d')!= -1:
@@ -86,12 +86,14 @@ class Dbl(nn.Module):
         x = self.block4(x)
         x = self.block5(x)
         x = self.fc_block(x)
+        x = self.fcblock_nconv(x)
         x = torch.nn.functional.interpolate(x,size=branch.size()[2:],mode='bilinear',align_corners=True)
         x = torch.cat([x,branch],dim=1)
         fc_conv_1 = self.fc_conv(x)
         out1 = torch.nn.functional.interpolate(fc_conv_1,size=input.size()[2:],mode='bilinear',align_corners=True)
         x = torch.cat([fc_conv_1,x,block1_1],dim=1)
         x = self.last_block(x)
+        x = self.last_conv(x)
         out2 = torch.nn.functional.interpolate(x,size=input.size()[2:],mode='bilinear',align_corners=True)
         return out1,out2
 
@@ -121,7 +123,7 @@ class Dbl(nn.Module):
 
 
 if __name__ == "__main__":
-    model = Dbl(5)
+    model = Dbl(7)
     model.eval()
     input = torch.rand(1, 3, 513,513)
     output1,output2 = model(input)

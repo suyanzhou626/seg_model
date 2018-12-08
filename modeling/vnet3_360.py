@@ -64,7 +64,7 @@ class Vnet3_360(nn.Module):
         self.deconvbblock2 = DeconvBlock(**self.deconv_parameter[1])
         self.deconvbblock3 = DeconvBlock(**self.deconv_parameter[2])
         self.deconvbblock4 = DeconvBlock(**self.deconv_parameter[3])
-        self.last_conv = conv_bn_relu(self.deconv_parameter[3]['planes'][-1],nclasses,1)
+        self.last_conv = nn.Conv2d(self.deconv_parameter[3]['planes'][-1],nclasses,1,stride=1,padding=0)
         self.branch1 = conv_bn_relu(self.block_parameter[0]['planes'][-1],self.block_parameter[0]['planes'][-1],1)
         self.branch2 = conv_bn_relu(self.block_parameter[1]['planes'][-1],self.block_parameter[1]['planes'][-1],1)
         self.branch3 = conv_bn_relu(self.block_parameter[2]['planes'][-1],self.block_parameter[2]['planes'][-1],1)
