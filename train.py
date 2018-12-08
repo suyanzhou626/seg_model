@@ -34,6 +34,15 @@ class Trainer(object):
         # Define network
         model = args.network(nclasses=self.nclass)
 
+        train_params = [{'params': model.get_conv_weight_params(), 'lr': args.lr,'weight_decay':args.weight_decay},
+                        {'params': model.get_conv_bias_params(), 'lr': args.lr * 2,'weight_decay':0},
+                        {'params': model.get_bn_params(),'lr': args.lr,'weight_decay':0}]
+        # train_params = [{'params':model.parameters(),'lr':args.lr}]
+
+        # Define Optimizer
+        optimizer = torch.optim.SGD(train_params, momentum=args.momentum, lr=args.lr,
+                                    weight_decay=args.weight_decay, nesterov=args.nesterov)
+
         # Define Criterion
         # whether to use class balanced weights
         if args.use_balanced_weights:
@@ -46,7 +55,7 @@ class Trainer(object):
         else:
             weight = None
         self.criterion = SegmentationLosses(weight=weight, cuda=args.cuda).build_loss(mode=args.loss_type)
-        self.model = model
+        self.model, self.optimizer = model, optimizer
         
         # Define Evaluator
         self.evaluator = Evaluator(self.nclass)
@@ -59,15 +68,6 @@ class Trainer(object):
             self.model = torch.nn.DataParallel(self.model)
             self.model = self.model.cuda()
 
-        train_params = [{'params': model.get_conv_weight_params(), 'lr': args.lr,'weight_decay':args.weight_decay},
-                        {'params': model.get_conv_bias_params(), 'lr': args.lr * 2,'weight_decay':0},
-                        {'params': model.get_bn_params(),'lr': args.lr,'weight_decay':0}]
-        # train_params = [{'params':model.parameters(),'lr':args.lr}]
-
-        # Define Optimizer
-        optimizer = torch.optim.SGD(train_params, momentum=args.momentum, lr=args.lr,
-                                    weight_decay=args.weight_decay, nesterov=args.nesterov)
-        self.optimizer = optimizer
         # Resuming checkpoint
         self.best_pred = 0.0
         if args.resume is not None:

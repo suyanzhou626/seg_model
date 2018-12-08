@@ -50,8 +50,7 @@ class V23_4x(nn.Module):
                 nn.init.kaiming_normal_(m.weight)
                 if m.bias is not None:
                     m.bias.data.zero_()
-            elif classname.find('BatchNorm2d') != -1:
-                m.weight.data.zero_()
+                    
     def forward(self,input):
         x = self.block1(input)
         out = self.block2(x)
