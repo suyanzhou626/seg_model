@@ -50,6 +50,8 @@ class Saver(object):
         p['backbone'] = self.args.backbone
         p['datset'] = self.args.dataset
         p['lr'] = self.args.lr
+        p['optim'] = self.args.optim_method
+        p['nesterov'] = self.args.nesterov
         p['momentum'] = self.args.momentum
         p['weight_decay'] = self.args.weight_decay
         p['fine tune'] = str(self.args.ft)
@@ -58,6 +60,7 @@ class Saver(object):
         p['class_balance'] = str(self.args.use_balanced_weights)
         p['lr_scheduler'] = self.args.lr_scheduler
         p['loss_type'] = self.args.loss_type
+        p['sync_bn'] = str(self.args.sync_bn)
         p['epoch'] = self.args.epochs
         p['crop_size'] = self.args.crop_size
 

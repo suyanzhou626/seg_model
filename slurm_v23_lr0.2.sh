@@ -16,4 +16,4 @@ now=$(date +"i%Y%m%d_%H%M%S")
 srun --partition=Pose --mpi=pmi2 --gres=gpu:4 --ntasks-per-node=1 -n1 --job-name=hair_v5 python \
 -u $EXECUTE_DIR --backbone $BACKBONE --dataset $DATASET --data_dir $DATA_DIR --crop_size $CROP_SIZE --num_classes $NUM_CLASSES \
 --epoch $EPOCH --batch_size $BATCH_SIZE \
---use_balanced_weights --save_dir $SAVE_DIR --lr 0.1 2>&1|tee $LOG_DIR/train-$now.log
+--use_balanced_weights --save_dir $SAVE_DIR --lr 0.2 --weight_decay 0.0002 2>&1|tee $LOG_DIR/train-$now.log

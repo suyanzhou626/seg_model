@@ -13,7 +13,7 @@ from utils.lr_scheduler import LR_Scheduler
 from utils.saver import Saver
 from utils.summaries import TensorboardSummary
 from utils.metrics import Evaluator
-
+from modeling.sync_batchnorm.replicate import patch_replication_callback
 class Trainer(object):
     def __init__(self, args):
         self.args = args
@@ -31,7 +31,7 @@ class Trainer(object):
         self.nclass = args.num_classes
 
         # Define network
-        model = args.network(nclasses=self.nclass)
+        model = args.network(nclasses=self.nclass,sync_bn=args.sync_bn)
 
         train_params = [{'params': model.get_conv_weight_params(), 'lr': args.lr,'weight_decay':args.weight_decay},
                         {'params': model.get_conv_bias_params(), 'lr': args.lr * 2,'weight_decay':0},
@@ -39,8 +39,11 @@ class Trainer(object):
         # train_params = [{'params':model.parameters(),'lr':args.lr}]
 
         # Define Optimizer
-        optimizer = torch.optim.SGD(train_params, momentum=args.momentum, lr=args.lr,
+        if args.optim_method == 'sgd':
+            optimizer = torch.optim.SGD(train_params, momentum=args.momentum, lr=args.lr,
                                     weight_decay=args.weight_decay, nesterov=args.nesterov)
+        else:
+            pass
 
         # Define Criterion
         # whether to use class balanced weights
@@ -58,6 +61,7 @@ class Trainer(object):
         
         # Define Evaluator
         self.evaluator = Evaluator(self.nclass)
+        self.evaluator_inner = Evaluator(self.nclass)
         # Define lr scheduler
         self.scheduler = LR_Scheduler(args.lr_scheduler, args.lr,
                                             args.epochs, len(self.train_loader))
@@ -65,6 +69,7 @@ class Trainer(object):
         # Using cuda
         if args.cuda:
             self.model = torch.nn.DataParallel(self.model)
+            patch_replication_callback(self.model)
             self.model = self.model.cuda()
 
         # Resuming checkpoint
@@ -92,13 +97,14 @@ class Trainer(object):
         train_loss = 0.0
         self.model.train()
         num_img_tr = len(self.train_loader)
+        self.evaluator_inner.reset()
         print('Training')
-        i = 0
-        for sample in self.train_loader:
+        print('=====>[Epoch: %d, numImages: %5d]' % (epoch, num_img_tr * self.args.batch_size))
+        for i,sample in enumerate(self.train_loader):
             image, target = sample['image'], sample['label']
             if self.args.cuda:
                 image, target = image.cuda(), target.cuda()
-            self.scheduler(self.optimizer, i, epoch, self.best_pred)
+            current_lr = self.scheduler(self.optimizer, i, epoch, self.best_pred)
             self.optimizer.zero_grad()
             if self.args.backbone == 'dbl':
                 output1,output = self.model(image)
@@ -111,9 +117,19 @@ class Trainer(object):
             loss.backward()
             self.optimizer.step()
             train_loss += loss.item()
-            if i % 10 == 0:
-                print('====>Iteration  %d/%d' % (i,num_img_tr))
-                print('Train loss: %.3f' % (train_loss / (i + 1)))
+            pred = output.data.cpu().numpy()
+            target_array = target.cpu().numpy()
+            pred = np.argmax(pred, axis=1)
+            self.evaluator_inner.add_batch(target_array,pred)
+            if i % 10 == 0 or i == num_img_tr -1:
+                Acc_train = self.evaluator.Pixel_Accuracy()
+                Acc_class_train = self.evaluator.Pixel_Accuracy_Class()
+                mIoU_train = self.evaluator.Mean_Intersection_over_Union()
+                FWIoU_train = self.evaluator.Frequency_Weighted_Intersection_over_Union()
+                print('\n===>Iteration  %d/%d    learning_rate: %.6f   previous best=%.4f   metric:' % (i,num_img_tr,current_lr,self.best_pred))
+                print('=>Train loss: %.4f    acc: %.4f     m_acc: %.4f     miou: %.4f     fwiou: %.4f' % (train_loss / (i + 1),
+                                                                                    Acc_train,Acc_class_train,mIoU_train,FWIoU_train))
+                self.evaluator_inner.reset()
             
             self.writer.add_scalar('train/total_loss_iter', loss.item(), i + num_img_tr * epoch)
 
@@ -124,16 +140,15 @@ class Trainer(object):
             i += 1
 
         self.writer.add_scalar('train/total_loss_epoch', train_loss, epoch)
-        print('[Epoch: %d, numImages: %5d]' % (epoch, i * self.args.batch_size + image.data.shape[0]))
-        print('Loss: %.3f\n' % train_loss)
 
 
     def validation(self, epoch):
         self.model.eval()
         self.evaluator.reset()
         test_loss = 0.0
-        print('Validation')
+        print('\nValidation')
         num_img_tr = len(self.val_loader)
+        print('=====>[Epoch: %d, numImages: %5d]' % (epoch, num_img_tr * self.args.batch_size))
         for i, sample in enumerate(self.val_loader):
             image, target = sample['image'], sample['label']
             if self.args.cuda:
@@ -146,13 +161,13 @@ class Trainer(object):
                     output = self.model(image)
                     loss = self.criterion(output, target)
             test_loss += loss.item()
-            print('====>Iteration  %d/%d' % (i,num_img_tr))
-            print('test loss: %.3f' % (test_loss / (i + 1)))
             pred = output.data.cpu().numpy()
             target = target.cpu().numpy()
             pred = np.argmax(pred, axis=1)
             # Add batch sample into evaluator
             self.evaluator.add_batch(target, pred)
+            # print('===>Iteration  %d/%d' % (i,num_img_tr))
+            # print('test loss: %.3f' % (test_loss / (i + 1)))
 
         # Fast test during the training
         Acc = self.evaluator.Pixel_Accuracy()
@@ -164,7 +179,6 @@ class Trainer(object):
         self.writer.add_scalar('val/Acc', Acc, epoch)
         self.writer.add_scalar('val/Acc_class', Acc_class, epoch)
         self.writer.add_scalar('val/fwIoU', FWIoU, epoch)
-        print('[Epoch: %d, numImages: %5d]' % (epoch, i * self.args.batch_size + image.data.shape[0]))
         print("Acc:{}, Acc_class:{}, mIoU:{}, fwIoU: {}".format(Acc, Acc_class, mIoU, FWIoU))
         print('Loss: %.3f\n\n' % test_loss)
 
@@ -206,6 +220,7 @@ def main():
     parser.add_argument('--batch_size', type=int, default=None,
                         metavar='N', help='input batch size for \
                                 training (default: auto)')
+    parser.add_argument('--optim_method',type=str,default='sgd')
     # parser.add_argument('--test_batch_size', type=int, default=None,
     #                     metavar='N', help='input batch size for \
     #                             testing (default: auto)')
@@ -247,6 +262,10 @@ def main():
     args.cuda = not args.no_cuda and torch.cuda.is_available()    
     args.gpus = torch.cuda.device_count()
     print("torch.cuda.device_count()=",args.gpus)
+    if args.cuda and args.gpus > 1:
+        args.sync_bn = True
+    else:
+        args.sync_bn = False
     # if args.test_batch_size is None:
     #     args.test_batch_size = args.batch_size
     if args.checkname is None:
