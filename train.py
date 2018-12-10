@@ -99,7 +99,7 @@ class Trainer(object):
         num_img_tr = len(self.train_loader)
         self.evaluator_inner.reset()
         print('Training')
-        print('=====>[Epoch: %d, numImages: %5d]' % (epoch, num_img_tr * self.args.batch_size))
+        print('=====>[Epoch: %d, numImages: %5d   previous best=%.4f]' % (epoch, num_img_tr * self.args.batch_size,self.best_pred))
         for i,sample in enumerate(self.train_loader):
             image, target = sample['image'], sample['label']
             if self.args.cuda:
@@ -122,12 +122,12 @@ class Trainer(object):
             pred = np.argmax(pred, axis=1)
             self.evaluator_inner.add_batch(target_array,pred)
             if i % 10 == 0 or i == num_img_tr -1:
-                Acc_train = self.evaluator.Pixel_Accuracy()
-                Acc_class_train = self.evaluator.Pixel_Accuracy_Class()
-                mIoU_train = self.evaluator.Mean_Intersection_over_Union()
-                FWIoU_train = self.evaluator.Frequency_Weighted_Intersection_over_Union()
-                print('\n===>Iteration  %d/%d    learning_rate: %.6f   previous best=%.4f   metric:' % (i,num_img_tr,current_lr,self.best_pred))
-                print('=>Train loss: %.4f    acc: %.4f     m_acc: %.4f     miou: %.4f     fwiou: %.4f' % (train_loss / (i + 1),
+                Acc_train = self.evaluator_inner.Pixel_Accuracy()
+                Acc_class_train = self.evaluator_inner.Pixel_Accuracy_Class()
+                mIoU_train = self.evaluator_inner.Mean_Intersection_over_Union()
+                FWIoU_train = self.evaluator_inner.Frequency_Weighted_Intersection_over_Union()
+                print('\n===>Iteration  %d/%d    learning_rate: %.6f   metric:' % (i,num_img_tr,current_lr))
+                print('=>Train loss: %.4f    acc: %.4f     m_acc: %.4f     miou: %.4f     fwiou: %.4f' % (loss.item(),
                                                                                     Acc_train,Acc_class_train,mIoU_train,FWIoU_train))
                 self.evaluator_inner.reset()
             

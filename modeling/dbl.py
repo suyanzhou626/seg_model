@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from collections import OrderedDict
+from modeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
 
 BLOCK_PARAMETER=[{'layers':2,'planes':[3,8,12],'k_sizes':[2,3],'strides':[2,2],'pads':[1,1],'dilations':[1,1]},
                  {'layers':4,'planes':[12,12,12,12,12],'k_sizes':[3,3,3,3],'strides':[1,1,1,1],'pads':[1,1,1,1],'dilations':[1,1,1,1]},
@@ -15,20 +16,20 @@ FC_BLOCK={'layers':4,'planes':[48,48,64,64,64],'k_sizes':[3,1,1,1],'strides':[1,
 #                   {'layers':2,'planes':[128,32,32],'k_sizes':[3,3],'strides':[1,1],'pads':[1,1],'dilations':[1,1]},
 #                   {'layers':2,'planes':[64,32,32],'k_sizes':[3,3],'strides':[1,1],'pads':[1,1],'dilations':[1,1]},]
 
-def conv_bn_relu(inplane,outplane,k_size,stride=1,pad=0,dilation=1):
+def conv_bn_relu(inplane,outplane,k_size,stride=1,pad=0,dilation=1,sync_bn=True):
     block = nn.Sequential(OrderedDict([('conv',nn.Conv2d(inplane,outplane,k_size,stride=stride,padding=pad,dilation=dilation)),
-    ('bn',nn.BatchNorm2d(outplane)),('prelu',nn.PReLU(outplane))]))
+    ('bn',nn.BatchNorm2d(outplane) if not sync_bn else SynchronizedBatchNorm2d(outplane)),('prelu',nn.PReLU(outplane))]))
     return block
 
 class DeconvBlock(nn.Module):
-    def __init__(self,layers,planes,k_sizes,strides=None,pads=None,dilations=None):
+    def __init__(self,layers,planes,k_sizes,strides=None,pads=None,dilations=None,sync_bn=True):
         super().__init__()
         self.strides = [1]*layers if strides==None else strides
         self.pads = [0]*layers if pads==None else pads
         self.dilations = [1]*layers if dilations==None else dilations
         blocks = []
         for i in range(layers):
-            blocks.append(conv_bn_relu(planes[i],planes[i+1],k_sizes[i],stride=self.strides[i],pad=self.pads[i],dilation=self.dilations[i]))
+            blocks.append(conv_bn_relu(planes[i],planes[i+1],k_sizes[i],stride=self.strides[i],pad=self.pads[i],dilation=self.dilations[i],sync_bn=sync_bn))
         self.block = nn.Sequential(*blocks)
     def forward(self,input1,input2):
         input1 = torch.nn.functional.interpolate(input1,size=input2.size()[2:],mode='bilinear',align_corners=True)
@@ -37,39 +38,39 @@ class DeconvBlock(nn.Module):
         return input
 
 class Block(nn.Module):
-    def __init__(self,layers,planes,k_sizes,strides=None,pads=None,dilations=None):
+    def __init__(self,layers,planes,k_sizes,strides=None,pads=None,dilations=None,sync_bn=True):
         super().__init__()
         self.strides = [1]*layers if strides==None else strides
         self.pads = [0]*layers if pads==None else pads
         self.dilations = [1]*layers if dilations==None else dilations
         blocks = []
         for i in range(layers):
-            blocks.append(conv_bn_relu(planes[i],planes[i+1],k_sizes[i],stride=self.strides[i],pad=self.pads[i],dilation=self.dilations[i]))
+            blocks.append(conv_bn_relu(planes[i],planes[i+1],k_sizes[i],stride=self.strides[i],pad=self.pads[i],dilation=self.dilations[i],sync_bn=sync_bn))
         self.block = nn.Sequential(*blocks)
     def forward(self,input):
         input = self.block(input)
         return input
 
 class Dbl(nn.Module):
-    def __init__(self,nclasses,block_parameter=None,fcblock_parameter=None,**kwards):
+    def __init__(self,nclasses,sync_bn=True,block_parameter=None,fcblock_parameter=None,**kwards):
         super().__init__()
         self.block_parameter = BLOCK_PARAMETER if block_parameter is None else block_parameter
         self.fcblock_parameter = FC_BLOCK if fcblock_parameter is None else fcblock_parameter 
         self.block_parameter[-1]['planes'][0]=3*nclasses+self.block_parameter[0]['planes'][-1]
         # self.deconv_parameter = DECONV_PARAMETER
-        self.block1 = Block(**self.block_parameter[0])
-        self.block2 = Block(**self.block_parameter[1])
-        self.block3 = Block(**self.block_parameter[2])
-        self.block4 = Block(**self.block_parameter[3])
-        self.block5 = Block(**self.block_parameter[4])
+        self.block1 = Block(**self.block_parameter[0],sync_bn=sync_bn)
+        self.block2 = Block(**self.block_parameter[1],sync_bn=sync_bn)
+        self.block3 = Block(**self.block_parameter[2],sync_bn=sync_bn)
+        self.block4 = Block(**self.block_parameter[3],sync_bn=sync_bn)
+        self.block5 = Block(**self.block_parameter[4],sync_bn=sync_bn)
         # self.deconvbblock1 = DeconvBlock(**self.deconv_parameter[0])
         # self.deconvbblock2 = DeconvBlock(**self.deconv_parameter[1])
         # self.deconvbblock3 = DeconvBlock(**self.deconv_parameter[2])
         # self.deconvbblock4 = DeconvBlock(**self.deconv_parameter[3])
-        self.fc_block = Block(**self.fcblock_parameter)
+        self.fc_block = Block(**self.fcblock_parameter,sync_bn=sync_bn)
         self.fcblock_nconv = nn.Conv2d(self.fcblock_parameter['planes'][-1],nclasses,1,padding=0)
-        self.last_block = Block(**self.block_parameter[5])
-        self.branch = conv_bn_relu(self.block_parameter[1]['planes'][-1],nclasses,1)
+        self.last_block = Block(**self.block_parameter[5],sync_bn=sync_bn)
+        self.branch = conv_bn_relu(self.block_parameter[1]['planes'][-1],nclasses,1,sync_bn=sync_bn)
         self.fc_conv = nn.Conv2d(2*nclasses,nclasses,3,stride=1,padding=1)
         self.last_conv = nn.Conv2d(self.block_parameter[-1]['planes'][-1],nclasses,3,stride=1,padding=1)
         for m in self.modules():
@@ -116,7 +117,7 @@ class Dbl(nn.Module):
 
     def get_bn_prelu_params(self):
         for m in self.named_modules():
-            if isinstance(m[1],nn.BatchNorm2d) or isinstance(m[1],nn.PReLU):
+            if isinstance(m[1],nn.BatchNorm2d) or isinstance(m[1],nn.PReLU) or isinstance(m[1],SynchronizedBatchNorm2d):
                 for p in m[1].parameters():
                     if p.requires_grad:
                         yield p

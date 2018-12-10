@@ -27,8 +27,8 @@ class SegmentationLosses(object):
 
         loss = criterion(logit, target.long())
 
-        if self.batch_average:
-            loss /= n
+        # if self.batch_average:
+        #     loss /= n
 
         return loss
 

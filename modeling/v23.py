@@ -88,7 +88,7 @@ class V23_4x(nn.Module):
 
     def get_bn_prelu_params(self):
         for m in self.named_modules():
-            if isinstance(m[1],nn.BatchNorm2d) or isinstance(m[1],nn.PReLU):
+            if isinstance(m[1],nn.BatchNorm2d) or isinstance(m[1],nn.PReLU) or isinstance(m[1],SynchronizedBatchNorm2d):
                 for p in m[1].parameters():
                     if p.requires_grad:
                         yield p
@@ -96,8 +96,17 @@ class V23_4x(nn.Module):
 
 if __name__ == "__main__":
     model = V23_4x(5)
-    for i in model.named_modules():
-        print(i)
+    num = 0
+    for i in model.parameters():
+        num += 1
+    num1 = 0
+    for i in model.get_conv_weight_params():
+        num1 += 1
+    for i in model.get_conv_bias_params():
+        num1 += 1
+    for i in model.get_bn_prelu_params():
+        num1 += 1
+    print(num,num1)
     model.eval()
     input = torch.rand(1, 3, 513,513)
     output = model(input)
