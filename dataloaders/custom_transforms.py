@@ -125,7 +125,7 @@ class FixScaleCrop(object):
         img = sample['image']
         mask = sample['label']
         w, h = img.size
-        if w < h:
+        if w > h:
             oh = self.crop_size
             ow = int(1.0 * w * oh / h)
         else:

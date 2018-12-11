@@ -139,7 +139,7 @@ class Trainer(object):
                 self.summary.visualize_image(self.writer, self.args.dataset, image, target, output, global_step)
             i += 1
 
-        self.writer.add_scalar('train/total_loss_epoch', train_loss, epoch)
+        self.writer.add_scalar('train/total_loss_epoch', train_loss/num_img_tr, epoch)
 
 
     def validation(self, epoch):
@@ -174,13 +174,13 @@ class Trainer(object):
         Acc_class = self.evaluator.Pixel_Accuracy_Class()
         mIoU = self.evaluator.Mean_Intersection_over_Union()
         FWIoU = self.evaluator.Frequency_Weighted_Intersection_over_Union()
-        self.writer.add_scalar('val/total_loss_epoch', test_loss, epoch)
+        self.writer.add_scalar('val/total_loss_epoch', test_loss/num_img_tr, epoch)
         self.writer.add_scalar('val/mIoU', mIoU, epoch)
         self.writer.add_scalar('val/Acc', Acc, epoch)
         self.writer.add_scalar('val/Acc_class', Acc_class, epoch)
         self.writer.add_scalar('val/fwIoU', FWIoU, epoch)
         print("Acc:{}, Acc_class:{}, mIoU:{}, fwIoU: {}".format(Acc, Acc_class, mIoU, FWIoU))
-        print('Loss: %.3f\n\n' % test_loss)
+        print('Loss: %.3f\n\n' % test_loss/num_img_tr)
 
         new_pred = mIoU
         if new_pred > self.best_pred:

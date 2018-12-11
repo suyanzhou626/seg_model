@@ -11,7 +11,7 @@ def make_data_loader(args, **kwargs):
         inx = input('please choose one index to use as train_list:')
         train_list=train_list[int(inx)]
     elif len(train_list) < 1:
-        raise NotImplementedError
+        train_list = None
     else:
         train_list = train_list[0]
     val_list = glob.glob(os.path.join(data_dir,'*val_list_'+dataset_name+'.txt')) if args.val_list is None else [args.val_list]
@@ -20,7 +20,7 @@ def make_data_loader(args, **kwargs):
         inx = input('please choose one index to use as val_list:')
         val_list=[val_list[int(inx)]]
     elif len(val_list) < 1:
-        raise NotImplementedError
+        val_list = None
     else:
         val_list = val_list[0]
     test_list = glob.glob(os.path.join(data_dir,'*test_list_'+dataset_name+'.txt'))
@@ -32,10 +32,20 @@ def make_data_loader(args, **kwargs):
         test_list=None
     else:
         test_list = test_list[0]
-    train_set = dataset.GenDataset(args,train_list,split='train')
-    val_set = dataset.GenDataset(args,val_list,split='val')
-    train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True,drop_last = True, **kwargs)
-    val_loader = DataLoader(val_set, batch_size=args.batch_size, shuffle=False,drop_last = True, **kwargs)
+    if train_list is not None:
+        train_set = dataset.GenDataset(args,train_list,split='train')
+        train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True,drop_last = True, **kwargs)
+    else:
+        train_loader = None
+        print('have no trainset')
+    
+    if val_set is not None:
+        val_set = dataset.GenDataset(args,val_list,split='val')
+        val_loader = DataLoader(val_set, batch_size=args.batch_size, shuffle=False,drop_last = True, **kwargs)
+    else:
+        val_loader = None
+        print('have no valset')
+    
     if test_list is not None:
         test_set = dataset.GenDataset(args,test_list,split='val')
         test_loader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False,drop_last = True, **kwargs)

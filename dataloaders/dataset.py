@@ -37,6 +37,10 @@ class GenDataset(Dataset):
             return self.transform_tr(sample)
         elif self.split == 'val':
             return self.transform_val(sample)
+        elif self.split == 'vis':
+            temp =  self.transform_vis(sample)
+            temp['name'] = self.images[index].split('/')[-1].split('.')[0]
+            return temp
 
     def _make_img_gt_point_pair(self, index):
         _img = Image.open(self.images[index]).convert('RGB')
@@ -62,6 +66,12 @@ class GenDataset(Dataset):
 
         return composed_transforms(sample)
 
+    def transform_vis(self,sample):
+        composed_transforms = transforms.Compose([
+            tr.Normalize(mean=self.args.normal_mean),
+            tr.ToTensor()
+        ])
+        return composed_transforms(sample)
 
     def __len__(self):
         return len(self.images)
@@ -84,27 +94,26 @@ if __name__ == "__main__":
 
     args.crop_size = 513
 
-    dataloader = DataLoader(coco_val, batch_size=4, shuffle=True, num_workers=0)
 
-    for ii, sample in enumerate(dataloader):
-        for jj in range(sample["image"].size()[0]):
-            img = sample['image'].numpy()
-            gt = sample['label'].numpy()
-            tmp = np.array(gt[jj]).astype(np.uint8)
-            segmap = decode_segmap(tmp, dataset='coco')
-            img_tmp = np.transpose(img[jj], axes=[1, 2, 0])
-            img_tmp *= (0.229, 0.224, 0.225)
-            img_tmp += (0.485, 0.456, 0.406)
-            img_tmp *= 255.0
-            img_tmp = img_tmp.astype(np.uint8)
-            plt.figure()
-            plt.title('display')
-            plt.subplot(211)
-            plt.imshow(img_tmp)
-            plt.subplot(212)
-            plt.imshow(segmap)
+    # for ii, sample in enumerate(dataloader):
+    #     for jj in range(sample["image"].size()[0]):
+    #         img = sample['image'].numpy()
+    #         gt = sample['label'].numpy()
+    #         tmp = np.array(gt[jj]).astype(np.uint8)
+    #         segmap = decode_segmap(tmp, dataset='coco')
+    #         img_tmp = np.transpose(img[jj], axes=[1, 2, 0])
+    #         img_tmp *= (0.229, 0.224, 0.225)
+    #         img_tmp += (0.485, 0.456, 0.406)
+    #         img_tmp *= 255.0
+    #         img_tmp = img_tmp.astype(np.uint8)
+    #         plt.figure()
+    #         plt.title('display')
+    #         plt.subplot(211)
+    #         plt.imshow(img_tmp)
+    #         plt.subplot(212)
+    #         plt.imshow(segmap)
 
-        if ii == 1:
-            break
+    #     if ii == 1:
+    #         break
 
-    plt.show(block=True)
+    # plt.show(block=True)
