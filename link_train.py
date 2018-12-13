@@ -2,6 +2,8 @@ import argparse
 import os
 import numpy as np
 import torch
+import linklink as link
+from torch.utils.data import DataLoader
 
 from modeling.v23 import V23_4x
 from modeling.vnet3_360 import Vnet3_360
@@ -13,23 +15,54 @@ from utils.lr_scheduler import LR_Scheduler
 from utils.saver import Saver
 from utils.summaries import TensorboardSummary
 from utils.metrics import Evaluator
-from modeling.sync_batchnorm.replicate import patch_replication_callback
+from utils.distributed_utils import *
+from utils.utils import DistributedSampler,simple_group_split
+
 class Trainer(object):
     def __init__(self, args):
+        rank, world_size = dist_init()
+        if args.bn_group_size is None:
+            args.bn_group_size = world_size
+        args.bn_var_mode = (link.syncbnVarMode_t.L1 
+                                       if args.bn_var_mode == 'L1' 
+                                       else link.syncbnVarMode_t.L2)
+        args.rank = rank
+        args.world_size = world_size
+        args.bn_group = simple_group_split(world_size, rank, world_size//args.bn_group_size)
         self.args = args
-
+        if rank == 0:
+            print("torch.cuda.device_count()=",args.gpus)
+            print(args)
         # Define Saver
         self.saver = Saver(args)
-        self.saver.save_experiment_config()
-        # Define Tensorboard Summary
-        self.summary = TensorboardSummary(self.saver.experiment_dir)
-        self.writer = self.summary.create_summary()
+        if rank == 0:
+            self.saver.save_experiment_config()
+            # Define Tensorboard Summary
+            self.summary = TensorboardSummary(self.saver.experiment_dir)
+            self.writer = self.summary.create_summary()
         
-        # Define Dataloader
         kwargs = {'num_workers': args.gpus, 'pin_memory': True}
-        self.train_loader, self.val_loader, self.test_loader = make_data_loader(args, **kwargs)
+        self.train_set, self.val_set, self.test_set = make_data_loader(args, **kwargs)
+        self.train_sampler = DistributedSampler(self.train_set)
+        self.val_sampler = DistributedSampler(self.val_set)
+        self.train_loader = DataLoader(self.train_set,batch_size=args.batch_size,drop_last=True,sampler=self.train_sampler)
+        self.val_loader = DataLoader(self.val_set,batch_size=args.batch_size,drop_last=True,sampler=self.val_sampler)
         self.nclass = args.num_classes
+        weight = torch.from_numpy(np.zeros((self.nclass,)))
 
+        if args.use_balanced_weights:
+            classes_weights_path = os.path.join(args.save_dir, args.dataset,'classes_weights.npy')
+            if os.path.isfile(classes_weights_path):
+                weight = np.load(classes_weights_path)
+                weight = torch.from_numpy(weight.astype(np.float32))
+            elif rank == 0:
+                weight = calculate_weigths_labels(args.save_dir,args.dataset, self.train_loader, self.nclass)
+                weight = torch.from_numpy(weight.astype(np.float32))
+            link.broadcast(weight,root=0)
+                    
+        else:
+            weight = None
+        
         # Define network
         model = args.network(self.args)
 
@@ -47,15 +80,6 @@ class Trainer(object):
 
         # Define Criterion
         # whether to use class balanced weights
-        if args.use_balanced_weights:
-            classes_weights_path = os.path.join(args.save_dir, args.dataset,'classes_weights.npy')
-            if os.path.isfile(classes_weights_path):
-                weight = np.load(classes_weights_path)
-            else:
-                weight = calculate_weigths_labels(args.save_dir,args.dataset, self.train_loader, self.nclass)
-            weight = torch.from_numpy(weight.astype(np.float32))
-        else:
-            weight = None
         self.criterion = SegmentationLosses(weight=weight, cuda=args.cuda).build_loss(mode=args.loss_type)
         self.model, self.optimizer = model, optimizer
         
@@ -65,41 +89,38 @@ class Trainer(object):
         # Define lr scheduler
         self.scheduler = LR_Scheduler(args.lr_scheduler, args.lr,
                                             args.epochs, len(self.train_loader))
-
-        # Using cuda
-        if args.cuda:
-            self.model = torch.nn.DataParallel(self.model)
-            patch_replication_callback(self.model)
-            self.model = self.model.cuda()
-
+        self.model = self.model.cuda()
+        model = DistModule(model,sync=False)
         # Resuming checkpoint
         self.best_pred = 0.0
         if args.resume is not None:
-            if not os.path.isfile(args.resume):
+            if not os.path.isfile(args.resume) and rank == 0:
                 raise RuntimeError("=> no checkpoint found at '{}'" .format(args.resume))
             checkpoint = torch.load(args.resume)
             self.args.start_epoch = checkpoint['epoch']
-            if args.cuda:
-                self.model.module.load_state_dict(checkpoint['state_dict'])
-            else:
-                self.model.load_state_dict(checkpoint['state_dict'])
+            self.model.load_state_dict(checkpoint['state_dict'])
             if not args.ft:
                 self.optimizer.load_state_dict(checkpoint['optimizer'])
             self.best_pred = checkpoint['best_pred']
-            print("=> loaded checkpoint '{}' (epoch {})"
+            if rank == 0:
+                print("=> loaded checkpoint '{}' (epoch {})"
                   .format(args.resume, checkpoint['epoch']))
 
         # Clear start epoch if fine-tuning
         if args.ft:
             self.args.start_epoch = 0
+        if rank == 0:
+            print('Starting Epoch:', self.args.start_epoch)
+            print('Total Epoches:', self.args.epochs)
 
     def training(self, epoch):
         train_loss = 0.0
         self.model.train()
         num_img_tr = len(self.train_loader)
         self.evaluator_inner.reset()
-        print('Training')
-        print('=====>[Epoch: %d, numImages: %5d   previous best=%.4f]' % (epoch, num_img_tr * self.args.batch_size,self.best_pred))
+        if self.args.rank == 0:
+            print('Training')
+            print('=====>[Epoch: %d, numImages: %5d   previous best=%.4f]' % (epoch, num_img_tr * self.args.batch_size*self.args.world_size,self.best_pred))
         for i,sample in enumerate(self.train_loader):
             image, target = sample['image'], sample['label']
             if self.args.cuda:
@@ -115,40 +136,53 @@ class Trainer(object):
                 output = self.model(image)
                 loss = self.criterion(output,target)
             loss.backward()
+            reduce_gradients(self.model,sync=False)
             self.optimizer.step()
+            link.allreduce(loss)
             train_loss += loss.item()
             pred = output.data.cpu().numpy()
             target_array = target.cpu().numpy()
             pred = np.argmax(pred, axis=1)
             self.evaluator_inner.add_batch(target_array,pred)
-            if i % 10 == 0 or i == num_img_tr -1:
-                Acc_train = self.evaluator_inner.Pixel_Accuracy()
-                Acc_class_train = self.evaluator_inner.Pixel_Accuracy_Class()
-                mIoU_train = self.evaluator_inner.Mean_Intersection_over_Union()
-                FWIoU_train = self.evaluator_inner.Frequency_Weighted_Intersection_over_Union()
-                print('\n===>Iteration  %d/%d    learning_rate: %.6f   metric:' % (i,num_img_tr,current_lr))
-                print('=>Train loss: %.4f    acc: %.4f     m_acc: %.4f     miou: %.4f     fwiou: %.4f' % (loss.item(),
-                                                                                    Acc_train,Acc_class_train,mIoU_train,FWIoU_train))
+            if i % 5 == 0 or i == num_img_tr -1:
+                Acc_train = torch.Tensor([self.evaluator_inner.Pixel_Accuracy()])
+                Acc_class_train = torch.Tensor([self.evaluator_inner.Pixel_Accuracy_Class()])
+                mIoU_train = torch.Tensor([self.evaluator_inner.Mean_Intersection_over_Union()])
+                FWIoU_train = torch.Tensor([self.evaluator_inner.Frequency_Weighted_Intersection_over_Union()])
+                link.allreduce(Acc_train)
+                link.allreduce(Acc_class_train)
+                link.allreduce(mIoU_train)
+                link.allreduce(FWIoU_train)
+                Acc_train = Acc_train.item()/self.args.world_size
+                Acc_class_train = Acc_class_train.item()/self.args.world_size
+                mIoU_train = mIoU_train.item()/self.args.world_size
+                FWIoU_train = FWIoU_train.item()/self.args.world_size
+                if self.args.rank == 0:
+                    print('\n===>Iteration  %d/%d    learning_rate: %.6f   metric:' % (i,num_img_tr,current_lr))
+                    print('=>Train loss: %.4f    acc: %.4f     m_acc: %.4f     miou: %.4f     fwiou: %.4f' 
+                                % (loss.item(),Acc_train,Acc_class_train,mIoU_train,FWIoU_train))
                 self.evaluator_inner.reset()
-            
-            self.writer.add_scalar('train/total_loss_iter', loss.item(), i + num_img_tr * epoch)
+            if self.args.rank == 0:
+                self.writer.add_scalar('train/total_loss_iter', loss.item(), i + num_img_tr * epoch)
 
             # Show 10 * 3 inference results each epoch
             if i % (num_img_tr // 10) == 0:
                 global_step = i + num_img_tr * epoch
-                self.summary.visualize_image(self.writer, self.args.dataset, image, target, output, global_step)
+                if self.args.rank == 0:
+                    self.summary.visualize_image(self.writer, self.args.dataset, image, target, output, global_step)
             i += 1
-
-        self.writer.add_scalar('train/total_loss_epoch', train_loss, epoch)
+        if self.args.rank == 0:
+            self.writer.add_scalar('train/total_loss_epoch', train_loss, epoch)
 
 
     def validation(self, epoch):
         self.model.eval()
         self.evaluator.reset()
         test_loss = 0.0
-        print('\nValidation')
         num_img_tr = len(self.val_loader)
-        print('=====>[Epoch: %d, numImages: %5d]' % (epoch, num_img_tr * self.args.batch_size))
+        if self.args.rank == 0:
+            print('\nValidation')
+            print('=====>[Epoch: %d, numImages: %5d]' % (epoch, num_img_tr * self.args.batch_size*self.args.world_size))
         for i, sample in enumerate(self.val_loader):
             image, target = sample['image'], sample['label']
             if self.args.cuda:
@@ -160,6 +194,7 @@ class Trainer(object):
                 else:
                     output = self.model(image)
                     loss = self.criterion(output, target)
+            link.allreduce(loss)
             test_loss += loss.item()
             pred = output.data.cpu().numpy()
             target = target.cpu().numpy()
@@ -170,25 +205,33 @@ class Trainer(object):
             # print('test loss: %.3f' % (test_loss / (i + 1)))
 
         # Fast test during the training
-        Acc = self.evaluator.Pixel_Accuracy()
-        Acc_class = self.evaluator.Pixel_Accuracy_Class()
-        mIoU = self.evaluator.Mean_Intersection_over_Union()
-        FWIoU = self.evaluator.Frequency_Weighted_Intersection_over_Union()
-        self.writer.add_scalar('val/total_loss_epoch', test_loss/num_img_tr, epoch)
-        self.writer.add_scalar('val/mIoU', mIoU, epoch)
-        self.writer.add_scalar('val/Acc', Acc, epoch)
-        self.writer.add_scalar('val/Acc_class', Acc_class, epoch)
-        self.writer.add_scalar('val/fwIoU', FWIoU, epoch)
-        print("Acc:{}, Acc_class:{}, mIoU:{}, fwIoU: {}".format(Acc, Acc_class, mIoU, FWIoU))
-        print('Loss: %.3f\n\n' % test_loss)
+        Acc = torch.Tensor([self.evaluator.Pixel_Accuracy()])
+        Acc_class = torch.Tensor([self.evaluator.Pixel_Accuracy_Class()])
+        mIoU = torch.Tensor([self.evaluator.Mean_Intersection_over_Union()])
+        FWIoU = torch.Tensor([self.evaluator.Frequency_Weighted_Intersection_over_Union()])
+        link.allreduce(Acc)
+        link.allreduce(Acc_class)
+        link.allreduce(mIoU)
+        link.allreduce(FWIoU)
+        Acc = Acc.item()/self.args.world_size
+        Acc_class = Acc_class.item()/self.args.world_size
+        mIoU = mIoU.item()/self.args.world_size
+        FWIoU = FWIoU.item()/self.args.world_size
+        if self.args.rank == 0:
+            self.writer.add_scalar('val/total_loss_epoch', test_loss/num_img_tr, epoch)
+            self.writer.add_scalar('val/mIoU', mIoU, epoch)
+            self.writer.add_scalar('val/Acc', Acc, epoch)
+            self.writer.add_scalar('val/Acc_class', Acc_class, epoch)
+            self.writer.add_scalar('val/fwIoU', FWIoU, epoch)
+            print("Loss: %.3f  Acc: %.4f,  Acc_class: %.4f,  mIoU: %.4f,  fwIoU: %.4f\n\n" % (test_loss,Acc, Acc_class, mIoU, FWIoU))
 
         new_pred = mIoU
-        if new_pred > self.best_pred:
+        if new_pred > self.best_pred and self.args.rank == 0:
             is_best = True
             self.best_pred = new_pred
             self.saver.save_checkpoint({
                 'epoch': epoch + 1,
-                'state_dict': self.model.module.state_dict(),
+                'state_dict': self.model.state_dict(),
                 'optimizer': self.optimizer.state_dict(),
                 'best_pred': self.best_pred,
             }, is_best)
@@ -221,6 +264,8 @@ def main():
                         metavar='N', help='input batch size for \
                                 training (default: auto)')
     parser.add_argument('--optim_method',type=str,default='sgd')
+    parser.add_argument('--bn_group_size',type=int,default=None)
+    parser.add_argument('--bn_var_mode',type=str,default='L2')
     # parser.add_argument('--test_batch_size', type=int, default=None,
     #                     metavar='N', help='input batch size for \
     #                             testing (default: auto)')
@@ -261,7 +306,6 @@ def main():
     args.network = network_map[args.backbone]
     args.cuda = not args.no_cuda and torch.cuda.is_available()    
     args.gpus = torch.cuda.device_count()
-    print("torch.cuda.device_count()=",args.gpus)
     if args.cuda and args.gpus > 1:
         args.sync_bn = True
     else:
@@ -270,11 +314,8 @@ def main():
     #     args.test_batch_size = args.batch_size
     if args.checkname is None:
         args.checkname = args.backbone
-    print(args)
     torch.manual_seed(args.seed)
     trainer = Trainer(args)
-    print('Starting Epoch:', trainer.args.start_epoch)
-    print('Total Epoches:', trainer.args.epochs)
     for epoch in range(trainer.args.start_epoch, trainer.args.epochs):
         trainer.training(epoch)
         if epoch % args.eval_interval == (args.eval_interval - 1):

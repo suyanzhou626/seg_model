@@ -36,13 +36,15 @@ def make_data_loader(args, **kwargs):
         train_set = dataset.GenDataset(args,train_list,split='train')
         train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True,drop_last = True, **kwargs)
     else:
+        train_set = None
         train_loader = None
         print('have no trainset')
     
-    if val_set is not None:
+    if val_list is not None:
         val_set = dataset.GenDataset(args,val_list,split='val')
         val_loader = DataLoader(val_set, batch_size=args.batch_size, shuffle=False,drop_last = True, **kwargs)
     else:
+        val_set = None
         val_loader = None
         print('have no valset')
     
@@ -50,5 +52,9 @@ def make_data_loader(args, **kwargs):
         test_set = dataset.GenDataset(args,test_list,split='val')
         test_loader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False,drop_last = True, **kwargs)
     else:
+        test_set = None
         test_loader = None
-    return train_loader,val_loader,test_loader
+    if 'rank' in args:
+        return train_set,val_set,test_set
+    else:
+        return train_loader,val_loader,test_loader

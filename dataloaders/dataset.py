@@ -27,7 +27,10 @@ class GenDataset(Dataset):
             self.images.append(_image)
             self.categories.append(_cat)
         assert (len(self.images) == len(self.categories))
-        print('Number of images in {}: {:d}'.format(self._data_list.split('/')[-1], len(self.images)))
+        if not 'rank' in args:
+            print('Number of images in {}: {:d}'.format(self._data_list.split('/')[-1], len(self.images)))
+        elif args.rank == 0:
+            print('Number of images in {}: {:d}'.format(self._data_list.split('/')[-1], len(self.images)))
 
     def __getitem__(self, index):
         _img, _target = self._make_img_gt_point_pair(index)
