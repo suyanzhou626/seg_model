@@ -19,9 +19,8 @@ class Valuator(object):
         
         # Define Dataloader
         self.nclass = args.num_classes
-
         # Define network
-        model = args.network(nclasses=self.nclass,sync_bn=args.sync_bn)
+        model = args.network(self.args)
 
         self.model = model
         self.evaluator = Evaluator(self.nclass)
