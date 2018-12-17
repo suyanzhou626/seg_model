@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 from collections import OrderedDict
-from modeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
 BN = None
 BLOCK_PARAMETER=[{'layers':2,'planes':[3,8,12],'k_sizes':[2,3],'strides':[2,2],'pads':[1,1],'dilations':[1,1]},
                  {'layers':4,'planes':[12,12,12,12,12],'k_sizes':[3,3,3,3],'strides':[1,1,1,1],'pads':[1,1,1,1],'dilations':[1,1,1,1]},
@@ -55,19 +54,7 @@ class Dbl(nn.Module):
     def __init__(self,args,block_parameter=None,fcblock_parameter=None,**kwards):
         super().__init__()
         global BN
-        self.args = args
-        if self.args.sync_bn and 'rank' in self.args:
-            import linklink as link
-            def BNFunc(*args, **kwargs):
-                return link.nn.SyncBatchNorm2d(*args, **kwargs, 
-                                   group=self.args.bn_group, 
-                                   sync_stats=True, 
-                                   var_mode=self.args.bn_var_mode)
-            BN = BNFunc
-        elif self.args.sync_bn:
-            BN = SynchronizedBatchNorm2d
-        else:
-            BN = nn.BatchNorm2d
+        BN = args.batchnorm_function
         self.block_parameter = BLOCK_PARAMETER if block_parameter is None else block_parameter
         self.fcblock_parameter = FC_BLOCK if fcblock_parameter is None else fcblock_parameter 
         self.block_parameter[-1]['planes'][0]=3*args.num_classes+self.block_parameter[0]['planes'][-1]
@@ -130,26 +117,47 @@ class Dbl(nn.Module):
 
 
     def get_bn_prelu_params(self):
-        for m in self.named_modules():
-            if 'rank' in self.args:
-                import linklink as link
-                if isinstance(m[1],nn.BatchNorm2d) or isinstance(m[1],nn.PReLU) or isinstance(m[1],link.nn.SyncBatchNorm2d):
-                    for p in m[1].parameters():
-                        if p.requires_grad:
-                            yield p
-            else:
-                if isinstance(m[1],nn.BatchNorm2d) or isinstance(m[1],nn.PReLU) or isinstance(m[1],SynchronizedBatchNorm2d):
-                    for p in m[1].parameters():
-                        if p.requires_grad:
-                            yield p
+        for m in self.named_parameters():
+            if 'bn' in m[0] or 'prelu' in m[0]:
+                if m[1].requires_grad:
+                    yield m[1]
 
 if __name__ == "__main__":
     import argparse
+    import torch
     parser = argparse.ArgumentParser()
     args = parser.parse_args()
-    args.num_classes = 7
-    args.sync_bn = False
+    args.num_classes = 4
+    args.batchnorm_function = torch.nn.BatchNorm2d
     model = Dbl(args)
+    tempa = []
+    tempb = []
+    for i in model.named_parameters():
+        tempa.append(i[0])
+
+    for m in model.named_modules():
+        if isinstance(m[1],torch.nn.Conv2d):
+            for p in m[1].named_parameters():
+                if p[1].requires_grad:
+                    tempb.append(m[0]+'.'+p[0])
+    for m in model.named_parameters():
+        if 'bn' in m[0] or 'prelu' in m[0]:
+            if m[1].requires_grad:
+                tempb.append(m[0])
+    tempa = sorted(tempa)
+    tempb = sorted(tempb)
+    print(tempa == tempb)
+    num = 0
+    for i in model.parameters():
+        num += 1
+    num1 = 0
+    for i in model.get_conv_weight_params():
+        num1 += 1
+    for i in model.get_conv_bias_params():
+        num1 += 1
+    for i in model.get_bn_prelu_params():
+        num1 += 1
+    print(num,num1)
     model.eval()
     input = torch.rand(1, 3, 513,513)
     output1,output2 = model(input)

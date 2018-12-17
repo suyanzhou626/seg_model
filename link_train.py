@@ -29,34 +29,43 @@ class Trainer(object):
         args.rank = rank
         args.world_size = world_size
         args.bn_group = simple_group_split(world_size, rank, world_size//args.bn_group_size)
+        def BNFunc(*args, **kwargs):
+            return link.nn.SyncBatchNorm2d(*args, **kwargs, 
+                                   group=self.args.bn_group, 
+                                   sync_stats=True, 
+                                   var_mode=self.args.bn_var_mode)
         self.args = args
+        if self.args.sync_bn:
+            self.args.batchnorm_function = BNFunc
+        else:
+            self.args.batchnorm_function = torch.nn.BatchNorm2d
         if rank == 0:
-            print("torch.cuda.device_count()=",args.gpus)
-            print(args)
+            print("torch.cuda.device_count()=",self.args.gpus)
+            print(self.args)
         # Define Saver
-        self.saver = Saver(args)
+        self.saver = Saver(self.args)
         if rank == 0:
             self.saver.save_experiment_config()
             # Define Tensorboard Summary
             self.summary = TensorboardSummary(self.saver.experiment_dir)
             self.writer = self.summary.create_summary()
         
-        kwargs = {'num_workers': args.gpus, 'pin_memory': True}
-        self.train_set, self.val_set, self.test_set = make_data_loader(args, **kwargs)
+        kwargs = {'num_workers': self.args.gpus, 'pin_memory': True}
+        self.train_set, self.val_set, self.test_set = make_data_loader(self.args, **kwargs)
         self.train_sampler = DistributedSampler(self.train_set)
         self.val_sampler = DistributedSampler(self.val_set)
-        self.train_loader = DataLoader(self.train_set,batch_size=args.batch_size,drop_last=True,sampler=self.train_sampler)
-        self.val_loader = DataLoader(self.val_set,batch_size=args.batch_size,drop_last=True,sampler=self.val_sampler)
-        self.nclass = args.num_classes
+        self.train_loader = DataLoader(self.train_set,batch_size=self.args.batch_size,drop_last=True,sampler=self.train_sampler)
+        self.val_loader = DataLoader(self.val_set,batch_size=self.args.batch_size,drop_last=True,sampler=self.val_sampler)
+        self.nclass = self.args.num_classes
         weight = torch.from_numpy(np.zeros((self.nclass,)))
 
-        if args.use_balanced_weights:
-            classes_weights_path = os.path.join(args.save_dir, args.dataset,'classes_weights.npy')
+        if self.args.use_balanced_weights:
+            classes_weights_path = os.path.join(self.args.save_dir, self.args.dataset,'classes_weights.npy')
             if os.path.isfile(classes_weights_path):
                 weight = np.load(classes_weights_path)
                 weight = torch.from_numpy(weight.astype(np.float32))
             elif rank == 0:
-                weight = calculate_weigths_labels(args.save_dir,args.dataset, self.train_loader, self.nclass)
+                weight = calculate_weigths_labels(self.args.save_dir,self.args.dataset, self.train_loader, self.nclass)
                 weight = torch.from_numpy(weight.astype(np.float32)).type(torch.FloatTensor)
             link.broadcast(weight,root=0)
                     
@@ -64,54 +73,54 @@ class Trainer(object):
             weight = None
         
         # Define network
-        model = args.network(self.args)
+        model = self.args.network(self.self.args)
 
-        train_params = [{'params': model.get_conv_weight_params(), 'lr': args.lr,'weight_decay':args.weight_decay},
-                        {'params': model.get_conv_bias_params(), 'lr': args.lr * 2,'weight_decay':0},
-                        {'params': model.get_bn_prelu_params(),'lr': args.lr,'weight_decay':0}]
-        # train_params = [{'params':model.parameters(),'lr':args.lr}]
+        train_params = [{'params': model.get_conv_weight_params(), 'lr': self.args.lr,'weight_decay':self.args.weight_decay},
+                        {'params': model.get_conv_bias_params(), 'lr': self.args.lr * 2,'weight_decay':0},
+                        {'params': model.get_bn_prelu_params(),'lr': self.args.lr,'weight_decay':0}]
+        # train_params = [{'params':model.parameters(),'lr':self.args.lr}]
 
         # Define Optimizer
-        if args.optim_method == 'sgd':
-            optimizer = torch.optim.SGD(train_params, momentum=args.momentum, lr=args.lr,
-                                    weight_decay=args.weight_decay, nesterov=args.nesterov)
+        if self.args.optim_method == 'sgd':
+            optimizer = torch.optim.SGD(train_params, momentum=self.args.momentum, lr=self.args.lr,
+                                    weight_decay=self.args.weight_decay, nesterov=self.args.nesterov)
         else:
             pass
 
         # Define Criterion
         # whether to use class balanced weights
-        self.criterion = SegmentationLosses(weight=weight, cuda=args.cuda).build_loss(mode=args.loss_type)
+        self.criterion = SegmentationLosses(weight=weight, cuda=self.args.cuda).build_loss(mode=self.args.loss_type)
         self.model, self.optimizer = model, optimizer
         
         # Define Evaluator
         self.evaluator = Evaluator(self.nclass)
         self.evaluator_inner = Evaluator(self.nclass)
         # Define lr scheduler
-        self.scheduler = LR_Scheduler(args.lr_scheduler, args.lr,
-                                            args.epochs, len(self.train_loader))
+        self.scheduler = LR_Scheduler(self.args.lr_scheduler, self.args.lr,
+                                            self.args.epochs, len(self.train_loader))
         self.model = self.model.cuda()
         model = DistModule(model,sync=False)
         # Resuming checkpoint
         self.best_pred = 0.0
-        if args.resume is not None:
-            if not os.path.isfile(args.resume) and rank == 0:
-                raise RuntimeError("=> no checkpoint found at '{}'" .format(args.resume))
-            checkpoint = torch.load(args.resume)
-            self.args.start_epoch = checkpoint['epoch']
+        if self.args.resume is not None:
+            if not os.path.isfile(self.args.resume) and rank == 0:
+                raise RuntimeError("=> no checkpoint found at '{}'" .format(self.args.resume))
+            checkpoint = torch.load(self.args.resume)
+            self.self.args.start_epoch = checkpoint['epoch']
             self.model.load_state_dict(checkpoint['state_dict'])
-            if not args.ft:
+            if not self.args.ft:
                 self.optimizer.load_state_dict(checkpoint['optimizer'])
             self.best_pred = checkpoint['best_pred']
             if rank == 0:
                 print("=> loaded checkpoint '{}' (epoch {})"
-                  .format(args.resume, checkpoint['epoch']))
+                  .format(self.args.resume, checkpoint['epoch']))
 
         # Clear start epoch if fine-tuning
-        if args.ft:
-            self.args.start_epoch = 0
+        if self.args.ft:
+            self.self.args.start_epoch = 0
         if rank == 0:
-            print('Starting Epoch:', self.args.start_epoch)
-            print('Total Epoches:', self.args.epochs)
+            print('Starting Epoch:', self.self.args.start_epoch)
+            print('Total Epoches:', self.self.args.epochs)
 
     def training(self, epoch):
         train_loss = 0.0
