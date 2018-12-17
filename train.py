@@ -53,7 +53,7 @@ class Trainer(object):
                 weight = np.load(classes_weights_path)
             else:
                 weight = calculate_weigths_labels(args.save_dir,args.dataset, self.train_loader, self.nclass)
-            weight = torch.from_numpy(weight.astype(np.float32))
+            weight = torch.from_numpy(weight.astype(np.float32)).type(torch.FloatTensor)
         else:
             weight = None
         self.criterion = SegmentationLosses(weight=weight, cuda=args.cuda).build_loss(mode=args.loss_type)
@@ -134,10 +134,13 @@ class Trainer(object):
             self.writer.add_scalar('train/total_loss_iter', loss.item(), i + num_img_tr * epoch)
 
             # Show 10 * 3 inference results each epoch
-            if i % (num_img_tr // 10) == 0:
+            if num_img_tr > 10:
+                if i % (num_img_tr // 10) == 0:
+                    global_step = i + num_img_tr * epoch
+                    self.summary.visualize_image(self.writer, self.args.dataset, image, target, output, global_step)
+            else:
                 global_step = i + num_img_tr * epoch
                 self.summary.visualize_image(self.writer, self.args.dataset, image, target, output, global_step)
-            i += 1
 
         self.writer.add_scalar('train/total_loss_epoch', train_loss, epoch)
 

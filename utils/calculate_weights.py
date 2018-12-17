@@ -7,7 +7,10 @@ def calculate_weigths_labels(save_dir,dataset, dataloader, num_classes):
     print('Calculating classes weights')
     length = len(dataloader)
     for i,sample in enumerate(dataloader):
-        if i % (length // 10) == 0:
+        if length > 10:
+            if i % (length // 10) == 0:
+                print('===>%d/%d' % (i,length))
+        else:
             print('===>%d/%d' % (i,length))
         y = sample['label']
         y = y.detach().cpu().numpy()

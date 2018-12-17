@@ -57,7 +57,7 @@ class Trainer(object):
                 weight = torch.from_numpy(weight.astype(np.float32))
             elif rank == 0:
                 weight = calculate_weigths_labels(args.save_dir,args.dataset, self.train_loader, self.nclass)
-                weight = torch.from_numpy(weight.astype(np.float32))
+                weight = torch.from_numpy(weight.astype(np.float32)).type(torch.FloatTensor)
             link.broadcast(weight,root=0)
                     
         else:
@@ -166,11 +166,15 @@ class Trainer(object):
                 self.writer.add_scalar('train/total_loss_iter', loss.item(), i + num_img_tr * epoch)
 
             # Show 10 * 3 inference results each epoch
-            if i % (num_img_tr // 10) == 0:
+            if num_img_tr > 10:
+                if i % (num_img_tr // 10) == 0:
+                    global_step = i + num_img_tr * epoch
+                    if self.args.rank == 0:
+                        self.summary.visualize_image(self.writer, self.args.dataset, image, target, output, global_step)
+            else:
                 global_step = i + num_img_tr * epoch
                 if self.args.rank == 0:
                     self.summary.visualize_image(self.writer, self.args.dataset, image, target, output, global_step)
-            i += 1
         if self.args.rank == 0:
             self.writer.add_scalar('train/total_loss_epoch', train_loss, epoch)
 
@@ -320,8 +324,8 @@ def main():
         trainer.training(epoch)
         if epoch % args.eval_interval == (args.eval_interval - 1):
             trainer.validation(epoch)
-
-    trainer.writer.close()
+    if trainer.args.rank == 0:
+        trainer.writer.close()
 
 if __name__ == "__main__":
    main()

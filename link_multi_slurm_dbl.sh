@@ -1,4 +1,4 @@
-EXECUTE_DIR=/mnt/lustre/wuyao/seg_model/train.py
+EXECUTE_DIR=/mnt/lustre/wuyao/seg_model/link_train.py
 DATA_DIR=/mnt/lustrenew/liutinghao/train_data/data/segmentation_data/multiclass_seg/data257
 SAVE_DIR=/mnt/lustre/wuyao/segmentation/muticlass_257
 DATASET=all
@@ -15,7 +15,7 @@ mkdir -p $LOG_DIR
 part=Pose
 now=$(date +"i%Y%m%d_%H%M%S")
 
-srun --partition=Pose --mpi=pmi2 --gres=gpu:8 --ntasks-per-node=1 -n1 --job-name=multiclass_seg python -u \
+srun --partition=Pose --mpi=pmi2 --gres=gpu:4 --ntasks-per-node=4 -n4 --job-name=link_muti python -u \
 $EXECUTE_DIR --backbone $BACKBONE --dataset $DATASET --data_dir $DATA_DIR --crop_size $CROP_SIZE --num_classes $NUM_CLASSES \
 --epoch $EPOCH --batch_size $BATCH_SIZE \
 --use_balanced_weights --save_dir $SAVE_DIR --lr 0.1 --train_list $TRAIN_LIST --val_list $VAL_LIST 2>&1|tee $LOG_DIR/train-$now.log
