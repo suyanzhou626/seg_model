@@ -29,12 +29,9 @@ class Trainer(object):
         args.rank = rank
         args.world_size = world_size
         args.bn_group = simple_group_split(world_size, rank, world_size//args.bn_group_size)
-        def BNFunc(*args, **kwargs):
-            return link.nn.SyncBatchNorm2d(*args, **kwargs, 
-                                   group=self.args.bn_group, 
-                                   sync_stats=True, 
-                                   var_mode=self.args.bn_var_mode)
         self.args = args
+        def BNFunc(*args, **kwargs):
+            return link.nn.SyncBatchNorm2d(*args, group=self.args.bn_group, sync_stats=True, var_mode=self.args.bn_var_mode, **kwargs)
         if self.args.sync_bn:
             self.args.batchnorm_function = BNFunc
         else:
@@ -43,7 +40,7 @@ class Trainer(object):
             print("torch.cuda.device_count()=",self.args.gpus)
             print(self.args)
         # Define Saver
-        self.saver = Saver(self.args)
+            self.saver = Saver(self.args)
         if rank == 0:
             self.saver.save_experiment_config()
             # Define Tensorboard Summary
@@ -57,7 +54,7 @@ class Trainer(object):
         self.train_loader = DataLoader(self.train_set,batch_size=self.args.batch_size,drop_last=True,sampler=self.train_sampler)
         self.val_loader = DataLoader(self.val_set,batch_size=self.args.batch_size,drop_last=True,sampler=self.val_sampler)
         self.nclass = self.args.num_classes
-        weight = torch.from_numpy(np.zeros((self.nclass,)))
+        weight = torch.from_numpy(np.zeros((self.nclass,))).type(torch.FloatTensor)
 
         if self.args.use_balanced_weights:
             classes_weights_path = os.path.join(self.args.save_dir, self.args.dataset,'classes_weights.npy')
@@ -73,7 +70,7 @@ class Trainer(object):
             weight = None
         
         # Define network
-        model = self.args.network(self.self.args)
+        model = self.args.network(self.args)
 
         train_params = [{'params': model.get_conv_weight_params(), 'lr': self.args.lr,'weight_decay':self.args.weight_decay},
                         {'params': model.get_conv_bias_params(), 'lr': self.args.lr * 2,'weight_decay':0},
@@ -106,7 +103,7 @@ class Trainer(object):
             if not os.path.isfile(self.args.resume) and rank == 0:
                 raise RuntimeError("=> no checkpoint found at '{}'" .format(self.args.resume))
             checkpoint = torch.load(self.args.resume)
-            self.self.args.start_epoch = checkpoint['epoch']
+            self.args.start_epoch = checkpoint['epoch']
             self.model.load_state_dict(checkpoint['state_dict'])
             if not self.args.ft:
                 self.optimizer.load_state_dict(checkpoint['optimizer'])
@@ -117,10 +114,10 @@ class Trainer(object):
 
         # Clear start epoch if fine-tuning
         if self.args.ft:
-            self.self.args.start_epoch = 0
+            self.args.start_epoch = 0
         if rank == 0:
-            print('Starting Epoch:', self.self.args.start_epoch)
-            print('Total Epoches:', self.self.args.epochs)
+            print('Starting Epoch:', self.args.start_epoch)
+            print('Total Epoches:', self.args.epochs)
 
     def training(self, epoch):
         train_loss = 0.0

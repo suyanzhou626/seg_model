@@ -83,7 +83,7 @@ class Trainer(object):
             if not os.path.isfile(self.args.resume):
                 raise RuntimeError("=> no checkpoint found at '{}'" .format(self.args.resume))
             checkpoint = torch.load(self.args.resume)
-            self.self.args.start_epoch = checkpoint['epoch']
+            self.args.start_epoch = checkpoint['epoch']
             if self.args.cuda:
                 self.model.module.load_state_dict(checkpoint['state_dict'])
             else:
@@ -96,7 +96,7 @@ class Trainer(object):
 
         # Clear start epoch if fine-tuning
         if self.args.ft:
-            self.self.args.start_epoch = 0
+            self.args.start_epoch = 0
 
     def training(self, epoch):
         train_loss = 0.0

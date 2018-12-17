@@ -18,29 +18,29 @@ class Valuator(object):
         self.args = args
         
         # Define Dataloader
-        self.nclass = args.num_classes
+        self.nclass = self.args.num_classes
         # Define network
-        model = args.network(self.args)
+        model = self.args.network(self.args)
 
         self.model = model
         self.evaluator = Evaluator(self.nclass)
 
         # Using cuda
-        if args.cuda:
+        if self.args.cuda:
             self.model = torch.nn.DataParallel(self.model)
             patch_replication_callback(self.model)
             self.model = self.model.cuda()
 
         # Resuming checkpoint
-        if not os.path.isfile(args.resume):
-            raise RuntimeError("=> no checkpoint found at '{}'" .format(args.resume))
-        checkpoint = torch.load(args.resume)
-        if args.cuda:
+        if not os.path.isfile(self.args.resume):
+            raise RuntimeError("=> no checkpoint found at '{}'" .format(self.args.resume))
+        checkpoint = torch.load(self.args.resume)
+        if self.args.cuda:
             self.model.module.load_state_dict(checkpoint['state_dict'])
         else:
             self.model.load_state_dict(checkpoint['state_dict'])
         print("=> loaded checkpoint '{}' (epoch {})"
-                .format(args.resume, checkpoint['epoch']))
+                .format(self.args.resume, checkpoint['epoch']))
 
     def visual(self):
         self.model.eval()
