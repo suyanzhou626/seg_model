@@ -19,13 +19,21 @@ class GenDataset(Dataset):
         self.categories = []
         with open(self._data_list,'r') as f:
             lines = f.readlines()
+        temp_discard = 0
+        temp_all = 0
         for ii, line in enumerate(lines):
             _image = os.path.join(self._base_dir, line.split()[0])
             _cat = os.path.join(self._base_dir, line.split()[1])
-            assert os.path.isfile(_image)
-            assert os.path.isfile(_cat)
+            temp_all += 1
+            if not os.path.isfile(_image):
+                temp_discard += 1
+                continue
+            if not os.path.isfile(_cat):
+                temp_discard += 1
+                continue
             self.images.append(_image)
             self.categories.append(_cat)
+        print('all images have: %d, discard %d' % (temp_all,temp_discard))
         assert (len(self.images) == len(self.categories))
         if not 'rank' in args:
             print('Number of images in {}: {:d}'.format(self._data_list.split('/')[-1], len(self.images)))

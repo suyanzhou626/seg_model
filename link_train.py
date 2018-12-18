@@ -62,7 +62,8 @@ class Trainer(object):
                 weight = np.load(classes_weights_path)
                 weight = torch.from_numpy(weight.astype(np.float32))
             elif rank == 0:
-                weight = calculate_weigths_labels(self.args.save_dir,self.args.dataset, self.train_loader, self.nclass)
+                temp_train_loader = DataLoader(self.train_set, batch_size=self.args.batch_size, shuffle=True,drop_last = True, **kwargs)
+                weight = calculate_weigths_labels(self.args.save_dir,self.args.dataset, temp_train_loader, self.nclass)
                 weight = torch.from_numpy(weight.astype(np.float32)).type(torch.FloatTensor)
             link.broadcast(weight,root=0)
                     
