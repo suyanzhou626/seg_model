@@ -82,6 +82,8 @@ class Trainer(object):
         if self.args.optim_method == 'sgd':
             optimizer = torch.optim.SGD(train_params, momentum=self.args.momentum, lr=self.args.lr,
                                     weight_decay=self.args.weight_decay, nesterov=self.args.nesterov)
+        elif self.args.optim_method == 'adagrad':
+            optimizer = torch.optim.Adagrad(train_params,lr=self.args.lr,weight_decay=self.args.weight_decay)
         else:
             pass
 

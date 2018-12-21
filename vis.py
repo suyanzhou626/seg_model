@@ -11,12 +11,16 @@ from modeling.vnet3_360 import Vnet3_360
 from modeling.dbl import Dbl
 from modeling.sync_batchnorm.replicate import patch_replication_callback
 from dataloaders.utils import decode_seg_map_sequence
+from modeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
 from dataloaders.dataset import GenDataset
 from utils.metrics import Evaluator
 class Valuator(object):
     def __init__(self, args):
         self.args = args
-        
+        if self.args.sync_bn:
+            self.args.batchnorm_function = SynchronizedBatchNorm2d
+        else:
+            self.args.batchnorm_function = torch.nn.BatchNorm2d
         # Define Dataloader
         self.nclass = self.args.num_classes
         # Define network
