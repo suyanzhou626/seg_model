@@ -52,7 +52,7 @@ class Trainer(object):
         self.train_sampler = DistributedSampler(self.train_set)
         self.val_sampler = DistributedSampler(self.val_set)
         self.train_loader = DataLoader(self.train_set,batch_size=self.args.batch_size,drop_last=True,sampler=self.train_sampler)
-        self.val_loader = DataLoader(self.val_set,batch_size=self.args.batch_size,drop_last=True,sampler=self.val_sampler)
+        self.val_loader = DataLoader(self.val_set,batch_size=self.args.batch_size,drop_last=False,sampler=self.val_sampler)
         self.nclass = self.args.num_classes
         weight = torch.from_numpy(np.zeros((self.nclass,))).type(torch.FloatTensor)
 
@@ -195,7 +195,6 @@ class Trainer(object):
         num_img_tr = len(self.val_loader)
         if self.args.rank == 0:
             print('\nValidation')
-            print('=====>[Epoch: %d, numImages: %5d]' % (epoch, num_img_tr * self.args.batch_size*self.args.world_size))
         for i, sample in enumerate(self.val_loader):
             image, target = sample['image'], sample['label']
             if self.args.cuda:
@@ -236,6 +235,7 @@ class Trainer(object):
             self.writer.add_scalar('val/Acc', Acc, epoch)
             self.writer.add_scalar('val/Acc_class', Acc_class, epoch)
             self.writer.add_scalar('val/fwIoU', FWIoU, epoch)
+            print('=====>[Epoch: %d, numImages: %5d]' % (epoch, (i * self.args.batch_size + image.data.shape[0])*self.args.world_size))
             print("Loss: %.3f  Acc: %.4f,  Acc_class: %.4f,  mIoU: %.4f,  fwIoU: %.4f\n\n" % (test_loss,Acc, Acc_class, mIoU, FWIoU))
 
         new_pred = mIoU

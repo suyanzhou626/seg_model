@@ -158,7 +158,6 @@ class Trainer(object):
         test_loss = 0.0
         print('\nValidation')
         num_img_tr = len(self.val_loader)
-        print('=====>[Epoch: %d, numImages: %5d]' % (epoch, num_img_tr * self.args.batch_size))
         for i, sample in enumerate(self.val_loader):
             image, target = sample['image'], sample['label']
             if self.args.cuda:
@@ -189,6 +188,7 @@ class Trainer(object):
         self.writer.add_scalar('val/Acc', Acc, epoch)
         self.writer.add_scalar('val/Acc_class', Acc_class, epoch)
         self.writer.add_scalar('val/fwIoU', FWIoU, epoch)
+        print('=====>[Epoch: %d, numImages: %5d]' % (epoch, i * self.args.batch_size + image.data.shape[0]))
         print("Acc:{}, Acc_class:{}, mIoU:{}, fwIoU: {}".format(Acc, Acc_class, mIoU, FWIoU))
         print('Loss: %.3f\n\n' % test_loss)
 
