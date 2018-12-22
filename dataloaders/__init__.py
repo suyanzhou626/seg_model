@@ -42,7 +42,7 @@ def make_data_loader(args, **kwargs):
     
     if val_list is not None:
         val_set = dataset.GenDataset(args,val_list,split='val')
-        val_loader = DataLoader(val_set, batch_size=args.batch_size, shuffle=False,drop_last = False, **kwargs)
+        val_loader = DataLoader(val_set, batch_size=args.batch_size, shuffle=False,drop_last = True, **kwargs)
     else:
         val_set = None
         val_loader = None
@@ -50,7 +50,7 @@ def make_data_loader(args, **kwargs):
     
     if test_list is not None:
         test_set = dataset.GenDataset(args,test_list,split='val')
-        test_loader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False,drop_last = False, **kwargs)
+        test_loader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False,drop_last = True, **kwargs)
     else:
         test_set = None
         test_loader = None
