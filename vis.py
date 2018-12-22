@@ -103,21 +103,18 @@ class Valuator(object):
             pred_map = self.addImage(image.astype(dtype=np.uint8),prediction.astype(dtype=np.uint8))
             label = img.fromarray(label_map.astype(dtype=np.uint8),mode='RGB')
             pred = img.fromarray(pred_map.astype(dtype=np.uint8),mode='RGB')
+            label_mask = img.fromarray(label.astype(dtype=np.uint8),mode='RGB')
+            pred_mask = img.fromarray(prediction.astype(dtype=np.uint8),mode='RGB')
             shape1 = label.size
             shape2 = pred.size
             assert(shape1 == shape2)
-            if shape1[0] >= shape1[1]:
-                width = shape1[0]
-                height = 2*shape1[1]+60
-            else:
-                width = 2*shape1[0]+60
-                height = shape1[1]
+            width = 2*shape1[0] + 60
+            height = 2*shape1[1] + 60
             toImage = img.new('RGB',(width,height))
             toImage.paste(pred,(0,0))
-            if shape1[0] >= shape1[1]:
-                toImage.paste(label,(0,shape1[1]+60))
-            else:
-                toImage.paste(label,(shape1[0]+60,0))
+            toImage.paste(label,(shape1[0]+60,0))
+            toImage.paste(pred_mask,(0,shape1[1]+60))
+            toImage.paste(label_mask,(shape1[0]+60,shape[1]+60))
             toImage.save(save_name)
 
     def addImage(self,img1_path,img2_path):
