@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 from modeling.v23 import V23_4x
 from modeling.vnet3_360 import Vnet3_360
 from modeling.dbl import Dbl
+from modeling.msc import MSC
 from modeling.sync_batchnorm.replicate import patch_replication_callback
 from dataloaders.utils import decode_seg_map_sequence
 from modeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
@@ -97,13 +98,16 @@ class Valuator(object):
                 name = str(name)
             save_name = os.path.join(save_dir,name+'.png')
             image = images[i,:,:,:]
-            label = labels[i,:,:,:]
+            label_mask = labels[i,:,:,:]
             prediction = predictions[i,:,:,:]
-            label_map = self.addImage(image.astype(dtype=np.uint8),label.astype(dtype=np.uint8))
+            if image.shape != label_mask.shape:
+                print('error in %s' % name)
+                continue
+            label_map = self.addImage(image.astype(dtype=np.uint8),label_mask.astype(dtype=np.uint8))
             pred_map = self.addImage(image.astype(dtype=np.uint8),prediction.astype(dtype=np.uint8))
             label = img.fromarray(label_map.astype(dtype=np.uint8),mode='RGB')
             pred = img.fromarray(pred_map.astype(dtype=np.uint8),mode='RGB')
-            label_mask = img.fromarray(label.astype(dtype=np.uint8),mode='RGB')
+            label_mask = img.fromarray(label_mask.astype(dtype=np.uint8),mode='RGB')
             pred_mask = img.fromarray(prediction.astype(dtype=np.uint8),mode='RGB')
             shape1 = label.size
             shape2 = pred.size
@@ -114,12 +118,12 @@ class Valuator(object):
             toImage.paste(pred,(0,0))
             toImage.paste(label,(shape1[0]+60,0))
             toImage.paste(pred_mask,(0,shape1[1]+60))
-            toImage.paste(label_mask,(shape1[0]+60,shape[1]+60))
+            toImage.paste(label_mask,(shape1[0]+60,shape1[1]+60))
             toImage.save(save_name)
 
     def addImage(self,img1_path,img2_path):
         alpha = 1
-        beta = 0.5
+        beta = 0.7
         gamma = 0
         img_add = cv2.addWeighted(img1_path,alpha,img2_path,beta,gamma)
         return img_add
@@ -152,7 +156,7 @@ def main():
                         help='put the path to resuming file if needed')
 
 
-    network_map = {'v23_4x':V23_4x,'vnet3_360':Vnet3_360,'dbl':Dbl}
+    network_map = {'v23_4x':V23_4x,'vnet3_360':Vnet3_360,'dbl':Dbl,'msc':MSC}
     args = parser.parse_args()
     args.network = network_map[args.backbone]
     args.cuda = not args.no_cuda and torch.cuda.is_available()    

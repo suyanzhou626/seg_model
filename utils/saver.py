@@ -74,7 +74,8 @@ class Saver(object):
         p['loss_type'] = self.args.loss_type
         p['sync_bn'] = str(self.args.sync_bn)
         p['epoch'] = self.args.epochs
-        p['crop_size'] = self.args.crop_size
+        p['crop_size'] = self.args.
+        p['link'] = str(self.args.use_link)
 
         for key, val in p.items():
             log_file.write(key + ':' + str(val) + '\n')

@@ -6,6 +6,7 @@ import torch
 from modeling.v23 import V23_4x
 from modeling.vnet3_360 import Vnet3_360
 from modeling.dbl import Dbl
+from modeling.msc import MSC
 from dataloaders import make_data_loader
 from utils.loss import SegmentationLosses
 from utils.calculate_weights import calculate_weigths_labels
@@ -265,8 +266,9 @@ def main():
     # evaluation option
     parser.add_argument('--eval_interval', type=int, default=1,
                         help='evaluuation interval (default: 1)')
+    parser.add_argument('--use_link',action='store_true',default=False)
 
-    network_map = {'v23_4x':V23_4x,'vnet3_360':Vnet3_360,'dbl':Dbl}
+    network_map = {'v23_4x':V23_4x,'vnet3_360':Vnet3_360,'dbl':Dbl,'msc':MSC}
     args = parser.parse_args()
     args.network = network_map[args.backbone]
     args.cuda = not args.no_cuda and torch.cuda.is_available()    

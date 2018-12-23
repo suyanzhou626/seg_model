@@ -10,6 +10,7 @@ from torchvision import transforms
 from modeling.v23 import V23_4x
 from modeling.vnet3_360 import Vnet3_360
 from modeling.dbl import Dbl
+from modeling.msc import MSC
 from dataloaders.utils import decode_seg_map_sequence
 from utils.metrics import Evaluator
 
@@ -93,7 +94,10 @@ class Valuator(object):
         print('\nvisualizing')
         vis_set = VideoDataset(video_path)
         fourcc = cv2.VideoWriter_fourcc(*'MJPG') #opencv3.0
-        videoWriter = cv2.VideoWriter(os.path.join(self.args.save_dir,video_path.split('/')[-1].split('.')[0]+'.avi'), fourcc, float(vis_set.framerate), (vis_set.wid,vis_set.hei))
+        save_name = os.path.join(self.args.save_dir,video_path.split('/')[-1].split('.')[0])
+        if not os.path.exists(save_name):
+            os.mkdir(save_name)
+        videoWriter = cv2.VideoWriter(save_name + '.avi', fourcc, float(vis_set.framerate), (vis_set.wid,vis_set.hei))
         vis_loader = DataLoader(vis_set, batch_size=self.args.batch_size, shuffle=False,drop_last=False)
         num_img_tr = len(vis_loader)
         print('=====>[frames: %5d]' % (num_img_tr * self.args.batch_size))
@@ -112,12 +116,13 @@ class Valuator(object):
             pred = np.argmax(pred, axis=1)
             pred = np.ones(pred.shape) - pred
             label = decode_seg_map_sequence(pred).cpu().numpy().transpose([0,2,3,1])
-            label = label[:,:,::-1]
+            label = label[:,:,:,::-1]
             pred = np.stack([pred,pred,pred],axis=3)
             ori[pred==1] = 0
             label[pred==0] = 0
             temp = ori + label
             temp = temp.astype(np.uint8)
+            cv2.imwrite(os.path.join(save_name,str(i)+'.jpg'),temp[0])
             videoWriter.write(temp[0])
         print('write %d frame' % (i+1))
         videoWriter.release()
@@ -140,7 +145,7 @@ def main():
                         help='put the path to resuming file if needed')
 
 
-    network_map = {'v23_4x':V23_4x,'vnet3_360':Vnet3_360,'dbl':Dbl}
+    network_map = {'v23_4x':V23_4x,'vnet3_360':Vnet3_360,'dbl':Dbl,'msc':MSC}
     args = parser.parse_args()
     args.batch_size = 1
     args.network = network_map[args.backbone]
