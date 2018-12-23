@@ -2,6 +2,7 @@ import argparse
 import os
 import numpy as np
 import torch
+import time
 import linklink as link
 from torch.utils.data import DataLoader
 
@@ -130,7 +131,7 @@ class Trainer(object):
         self.evaluator_inner.reset()
         if self.args.rank == 0:
             print('Training')
-            print('=====>[Epoch: %d, numImages: %5d   previous best=%.4f]' % (epoch, num_img_tr * self.args.batch_size*self.args.world_size,self.best_pred))
+            start_time = time.time()
         for i,sample in enumerate(self.train_loader):
             image, target = sample['image'], sample['label']
             if self.args.cuda:
@@ -170,10 +171,10 @@ class Trainer(object):
                 if self.args.rank == 0:
                     print('\n===>Iteration  %d/%d    learning_rate: %.6f   metric:' % (i,num_img_tr,current_lr))
                     print('=>Train loss: %.4f    acc: %.4f     m_acc: %.4f     miou: %.4f     fwiou: %.4f' 
-                                % (loss.item(),Acc_train,Acc_class_train,mIoU_train,FWIoU_train))
+                                % (loss.item()/self.args.world_size,Acc_train,Acc_class_train,mIoU_train,FWIoU_train))
                 self.evaluator_inner.reset()
             if self.args.rank == 0:
-                self.writer.add_scalar('train/total_loss_iter', loss.item(), i + num_img_tr * epoch)
+                self.writer.add_scalar('train/total_loss_iter', loss.item()/self.args.world_size, i + num_img_tr * epoch)
 
             # Show 10 * 3 inference results each epoch
             if num_img_tr > 10:
@@ -186,7 +187,10 @@ class Trainer(object):
                 if self.args.rank == 0:
                     self.summary.visualize_image(self.writer, self.args.dataset, image, target, output, global_step)
         if self.args.rank == 0:
-            self.writer.add_scalar('train/total_loss_epoch', train_loss, epoch)
+            stop_time = time.time()
+            print('=====>[Epoch: %d, numImages: %5d   time_consuming: %d]' % 
+            (epoch, num_img_tr * self.args.batch_size*self.args.world_size,stop_time-start_time))
+            self.writer.add_scalar('train/total_loss_epoch', train_loss/(self.args.world_size*num_img_tr), epoch)
 
 
     def validation(self, epoch):
@@ -196,6 +200,7 @@ class Trainer(object):
         num_img_tr = len(self.val_loader)
         if self.args.rank == 0:
             print('\nValidation')
+            start_time = time.time()
         for i, sample in enumerate(self.val_loader):
             image, target = sample['image'], sample['label']
             if self.args.cuda:
@@ -216,7 +221,7 @@ class Trainer(object):
             self.evaluator.add_batch(target, pred)
             # print('===>Iteration  %d/%d' % (i,num_img_tr))
             # print('test loss: %.3f' % (test_loss / (i + 1)))
-
+        stop_time = time.time()
         # Fast test during the training
         Acc = torch.Tensor([self.evaluator.Pixel_Accuracy()])
         Acc_class = torch.Tensor([self.evaluator.Pixel_Accuracy_Class()])
@@ -231,13 +236,13 @@ class Trainer(object):
         mIoU = mIoU.item()/self.args.world_size
         FWIoU = FWIoU.item()/self.args.world_size
         if self.args.rank == 0:
-            self.writer.add_scalar('val/total_loss_epoch', test_loss/num_img_tr, epoch)
+            self.writer.add_scalar('val/total_loss_epoch', test_loss/(self.args.world_size*num_img_tr), epoch)
             self.writer.add_scalar('val/mIoU', mIoU, epoch)
             self.writer.add_scalar('val/Acc', Acc, epoch)
             self.writer.add_scalar('val/Acc_class', Acc_class, epoch)
             self.writer.add_scalar('val/fwIoU', FWIoU, epoch)
-            print('=====>[Epoch: %d, numImages: %5d]' % (epoch, (i * self.args.batch_size + image.data.shape[0])*self.args.world_size))
-            print("Loss: %.3f  Acc: %.4f,  Acc_class: %.4f,  mIoU: %.4f,  fwIoU: %.4f\n\n" % (test_loss,Acc, Acc_class, mIoU, FWIoU))
+            print('=====>[Epoch: %d, numImages: %5d   previous best=%.4f    time_consuming: %d]' % (epoch, num_img_tr * self.args.batch_size*self.args.world_size,self.best_pred,stop_time-start_time))
+            print("Loss: %.3f  Acc: %.4f,  Acc_class: %.4f,  mIoU: %.4f,  fwIoU: %.4f\n\n" % (test_loss/(self.args.world_size*num_img_tr),Acc, Acc_class, mIoU, FWIoU))
 
         new_pred = mIoU
         if new_pred > self.best_pred and self.args.rank == 0:

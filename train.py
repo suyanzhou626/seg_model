@@ -2,6 +2,7 @@ import argparse
 import os
 import numpy as np
 import torch
+import time
 
 from modeling.v23 import V23_4x
 from modeling.vnet3_360 import Vnet3_360
@@ -107,7 +108,7 @@ class Trainer(object):
         num_img_tr = len(self.train_loader)
         self.evaluator_inner.reset()
         print('Training')
-        print('=====>[Epoch: %d, numImages: %5d   previous best=%.4f]' % (epoch, num_img_tr * self.args.batch_size,self.best_pred))
+        start_time = time.time()
         for i,sample in enumerate(self.train_loader):
             image, target = sample['image'], sample['label']
             if self.args.cuda:
@@ -149,8 +150,10 @@ class Trainer(object):
             else:
                 global_step = i + num_img_tr * epoch
                 self.summary.visualize_image(self.writer, self.args.dataset, image, target, output, global_step)
-
-        self.writer.add_scalar('train/total_loss_epoch', train_loss, epoch)
+        stop_time = time.time()
+        self.writer.add_scalar('train/total_loss_epoch', train_loss/num_img_tr, epoch)
+        print('=====>[Epoch: %d, numImages: %5d   time_consuming: %d]' % 
+        (epoch, num_img_tr * self.args.batch_size,stop_time-start_time))
 
 
     def validation(self, epoch):
@@ -159,6 +162,7 @@ class Trainer(object):
         test_loss = 0.0
         print('\nValidation')
         num_img_tr = len(self.val_loader)
+        start_time = time.time()
         for i, sample in enumerate(self.val_loader):
             image, target = sample['image'], sample['label']
             if self.args.cuda:
@@ -178,7 +182,7 @@ class Trainer(object):
             self.evaluator.add_batch(target, pred)
             # print('===>Iteration  %d/%d' % (i,num_img_tr))
             # print('test loss: %.3f' % (test_loss / (i + 1)))
-
+        stop_time = time.time()
         # Fast test during the training
         Acc = self.evaluator.Pixel_Accuracy()
         Acc_class = self.evaluator.Pixel_Accuracy_Class()
@@ -189,9 +193,9 @@ class Trainer(object):
         self.writer.add_scalar('val/Acc', Acc, epoch)
         self.writer.add_scalar('val/Acc_class', Acc_class, epoch)
         self.writer.add_scalar('val/fwIoU', FWIoU, epoch)
-        print('=====>[Epoch: %d, numImages: %5d]' % (epoch, i * self.args.batch_size + image.data.shape[0]))
+        print('=====>[Epoch: %d, numImages: %5d   previous best=%.4f    time_consuming: %d]' % (epoch, num_img_tr * self.args.batch_size,self.best_pred,(stop_time-start_time)))
         print("Acc:{}, Acc_class:{}, mIoU:{}, fwIoU: {}".format(Acc, Acc_class, mIoU, FWIoU))
-        print('Loss: %.3f\n\n' % test_loss)
+        print('Loss: %.3f\n\n' % test_loss/num_img_tr)
 
         new_pred = mIoU
         if new_pred > self.best_pred:
