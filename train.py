@@ -195,7 +195,7 @@ class Trainer(object):
         self.writer.add_scalar('val/fwIoU', FWIoU, epoch)
         print('=====>[Epoch: %d, numImages: %5d   previous best=%.4f    time_consuming: %d]' % (epoch, num_img_tr * self.args.batch_size,self.best_pred,(stop_time-start_time)))
         print("Acc:{}, Acc_class:{}, mIoU:{}, fwIoU: {}".format(Acc, Acc_class, mIoU, FWIoU))
-        print('Loss: %.3f\n\n' % test_loss/num_img_tr)
+        print('Loss: %.3f\n\n' % (test_loss/num_img_tr))
 
         new_pred = mIoU
         if new_pred > self.best_pred:
