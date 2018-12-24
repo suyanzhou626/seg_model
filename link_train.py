@@ -149,6 +149,7 @@ class Trainer(object):
             else:
                 output = self.model(image)
                 loss = self.criterion(output,target)
+            loss = loss/self.args.world_size
             loss.backward()
             reduce_gradients(self.model,sync=False)
             self.optimizer.step()
@@ -174,10 +175,10 @@ class Trainer(object):
                 if self.args.rank == 0:
                     print('\n===>Iteration  %d/%d    learning_rate: %.6f   metric:' % (i,num_img_tr,current_lr))
                     print('=>Train loss: %.4f    acc: %.4f     m_acc: %.4f     miou: %.4f     fwiou: %.4f' 
-                                % (loss.item()/self.args.world_size,Acc_train,Acc_class_train,mIoU_train,FWIoU_train))
+                                % (loss.item(),Acc_train,Acc_class_train,mIoU_train,FWIoU_train))
                 self.evaluator_inner.reset()
             if self.args.rank == 0:
-                self.writer.add_scalar('train/total_loss_iter', loss.item()/self.args.world_size, i + num_img_tr * epoch)
+                self.writer.add_scalar('train/total_loss_iter', loss.item(), i + num_img_tr * epoch)
 
             # Show 10 * 3 inference results each epoch
             if num_img_tr > 10:
@@ -193,7 +194,7 @@ class Trainer(object):
             stop_time = time.time()
             print('=====>[Epoch: %d, numImages: %5d   time_consuming: %d]' % 
             (epoch, num_img_tr * self.args.batch_size*self.args.world_size,stop_time-start_time))
-            self.writer.add_scalar('train/total_loss_epoch', train_loss/(self.args.world_size*num_img_tr), epoch)
+            self.writer.add_scalar('train/total_loss_epoch', train_loss/(num_img_tr), epoch)
 
 
     def validation(self, epoch):
@@ -215,6 +216,7 @@ class Trainer(object):
                 else:
                     output = self.model(image)
                     loss = self.criterion(output, target)
+            loss = loss/self.args.world_size
             link.allreduce(loss)
             test_loss += loss.item()
             pred = output.data.cpu().numpy()
@@ -245,7 +247,7 @@ class Trainer(object):
             self.writer.add_scalar('val/Acc_class', Acc_class, epoch)
             self.writer.add_scalar('val/fwIoU', FWIoU, epoch)
             print('=====>[Epoch: %d, numImages: %5d   previous best=%.4f    time_consuming: %d]' % (epoch, num_img_tr * self.args.batch_size*self.args.world_size,self.best_pred,stop_time-start_time))
-            print("Loss: %.3f  Acc: %.4f,  Acc_class: %.4f,  mIoU: %.4f,  fwIoU: %.4f\n\n" % (test_loss/(self.args.world_size*num_img_tr),Acc, Acc_class, mIoU, FWIoU))
+            print("Loss: %.3f  Acc: %.4f,  Acc_class: %.4f,  mIoU: %.4f,  fwIoU: %.4f\n\n" % (test_loss/(num_img_tr),Acc, Acc_class, mIoU, FWIoU))
 
         new_pred = mIoU
         if new_pred > self.best_pred and self.args.rank == 0:
