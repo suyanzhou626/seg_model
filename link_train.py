@@ -10,7 +10,7 @@ from modeling.v23 import V23_4x
 from modeling.vnet3_360 import Vnet3_360
 from modeling.dbl import Dbl
 from modeling.msc import MSC
-from dataloaders import make_data_loader
+from dataloaders.memcached_dataset import McDataset
 from utils.loss import SegmentationLosses
 from utils.calculate_weights import calculate_weigths_labels
 from utils.lr_scheduler import LR_Scheduler
@@ -18,7 +18,7 @@ from utils.saver import Saver
 from utils.summaries import TensorboardSummary
 from utils.metrics import Evaluator
 from utils.distributed_utils import *
-from utils.utils import DistributedSampler,simple_group_split
+from utils.utils import DistributedSampler,simple_group_split,DistributedGivenIterationSampler
 
 class Trainer(object):
     def __init__(self, args):
@@ -50,11 +50,14 @@ class Trainer(object):
             self.writer = self.summary.create_summary()
         
         kwargs = {'num_workers': self.args.gpus, 'pin_memory': True}
-        self.train_set, self.val_set, self.test_set = make_data_loader(self.args, **kwargs)
+        self.train_set = McDataset(self.args,self.args.train_list,split='train')
+        self.val_set = McDataset(self.args,self.args.val_list,split='val')
+
         self.train_sampler = DistributedSampler(self.train_set)
-        self.val_sampler = DistributedSampler(self.val_set)
-        self.train_loader = DataLoader(self.train_set,batch_size=self.args.batch_size,drop_last=True,sampler=self.train_sampler)
-        self.val_loader = DataLoader(self.val_set,batch_size=self.args.batch_size,drop_last=True,sampler=self.val_sampler)
+        self.val_sampler = DistributedSampler(self.val_set,round_up=False)
+
+        self.train_loader = DataLoader(self.train_set,batch_size=self.args.batch_size,sampler=self.train_sampler)
+        self.val_loader = DataLoader(self.val_set,batch_size=self.args.batch_size,sampler=self.val_sampler)
         self.nclass = self.args.num_classes
         weight = torch.from_numpy(np.zeros((self.nclass,))).type(torch.FloatTensor)
 
