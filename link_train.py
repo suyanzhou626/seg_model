@@ -104,7 +104,6 @@ class Trainer(object):
         self.scheduler = LR_Scheduler(self.args.lr_scheduler, self.args.lr,
                                             self.args.epochs, len(self.train_loader))
         self.model = self.model.cuda()
-        model = DistModule(model,sync=False)
         # Resuming checkpoint
         self.best_pred = 0.0
         if self.args.resume is not None:
@@ -119,6 +118,7 @@ class Trainer(object):
             if rank == 0:
                 print("=> loaded checkpoint '{}' (epoch {})"
                   .format(self.args.resume, checkpoint['epoch']))
+        self.model = DistModule(self.model,sync=False)
 
         # Clear start epoch if fine-tuning
         if self.args.ft:
