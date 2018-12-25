@@ -159,7 +159,7 @@ class Trainer(object):
             target_array = target.cpu().numpy()
             pred = np.argmax(pred, axis=1)
             self.evaluator_inner.add_batch(target_array,pred)
-            if i % 5 == 0 or i == num_img_tr -1:
+            if i % self.args.display_iter == 0:
                 Acc_train = torch.Tensor([self.evaluator_inner.Pixel_Accuracy()])
                 Acc_class_train = torch.Tensor([self.evaluator_inner.Pixel_Accuracy_Class()])
                 mIoU_train = torch.Tensor([self.evaluator_inner.Mean_Intersection_over_Union()])
@@ -280,6 +280,7 @@ def main():
                         choices=['ce', 'focal'],
                         help='loss func type (default: ce)')
     # training hyper params
+    parser.add_argument('--display_iter',type=int,default=10)
     parser.add_argument('--epochs', type=int, default=None, metavar='N',
                         help='number of epochs to train (default: auto)')
     parser.add_argument('--start_epoch', type=int, default=0,
