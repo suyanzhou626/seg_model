@@ -4,17 +4,77 @@ import numpy as np
 import torch
 import PIL.Image as img
 import cv2
-from torch.utils.data import DataLoader
-
+from torch.utils.data import DataLoader,Dataset
+from dataloaders import custom_transforms as tr
 from modeling.v23 import V23_4x
 from modeling.vnet3_360 import Vnet3_360
 from modeling.dbl import Dbl
 from modeling.msc import MSC
+from torchvision import transforms
 from modeling.sync_batchnorm.replicate import patch_replication_callback
 from dataloaders.utils import decode_seg_map_sequence
 from modeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
-from dataloaders.dataset import GenDataset
 from utils.metrics import Evaluator
+class GenDataset(Dataset):
+    def __init__(self,args,data_list,split='train'):
+        super().__init__()
+        self._base_dir = args.data_dir
+        self._data_list = data_list
+        self.args = args
+        self.split = split
+        self.images = []
+        self.categories = []
+        with open(self._data_list,'r') as f:
+            lines = f.readlines()
+        temp_discard = 0
+        temp_all = 0
+        for ii, line in enumerate(lines):
+            _image = os.path.join(self._base_dir, line.split()[0])
+            _cat = os.path.join(self._base_dir, line.split()[1])
+            temp_all += 1
+            if not os.path.isfile(_image):
+                temp_discard += 1
+                continue
+            if not os.path.isfile(_cat):
+                temp_discard += 1
+                continue
+            self.images.append(_image)
+            self.categories.append(_cat)
+        print('all images have: %d, discard %d' % (temp_all,temp_discard))
+        assert (len(self.images) == len(self.categories))
+        if not 'rank' in args:
+            print('Number of images in {}: {:d}'.format(self._data_list.split('/')[-1], len(self.images)))
+        elif args.rank == 0:
+            print('Number of images in {}: {:d}'.format(self._data_list.split('/')[-1], len(self.images)))
+
+    def __getitem__(self, index):
+        _img, _target = self._make_img_gt_point_pair(index)
+        sample = {'image': _img, 'label': _target}
+
+        temp =  self.transform_vis(sample)
+        temp['name'] = self.images[index].split('/')[-1].split('.')[0]
+        temp['ori'] = torch.from_numpy(np.array(_img))
+        return temp
+
+    def _make_img_gt_point_pair(self, index):
+        _img = img.open(self.images[index]).convert('RGB')
+        _target = img.open(self.categories[index])
+        assert(_target.mode == 'L' or _target.mode == 'P')
+        return _img, _target
+
+    def transform_vis(self,sample):
+        composed_transforms = transforms.Compose([
+            tr.Normalize(mean=self.args.normal_mean),
+            tr.ToTensor()
+        ])
+        return composed_transforms(sample)
+
+    def __len__(self):
+        return len(self.images)
+
+    def __str__(self):
+        return self.args.dataset + '  split=' + str(self.split)
+
 class Valuator(object):
     def __init__(self, args):
         self.args = args
@@ -58,7 +118,7 @@ class Valuator(object):
         num_img_tr = len(vis_loader)
         print('=====>[numImages: %5d]' % (num_img_tr * self.args.batch_size))
         for i, sample in enumerate(vis_loader):
-            image, target ,name = sample['image'], sample['label'], sample['name']
+            image, target ,name, ori = sample['image'], sample['label'], sample['name'], sample['ori']
             if self.args.cuda:
                 image, target = image.cuda(), target.cuda()
             with torch.no_grad():
@@ -70,8 +130,9 @@ class Valuator(object):
             pred = output.data.cpu().numpy()
             target = target.cpu().numpy()
             image = image.cpu().numpy()
+            ori = ori.cpu().numpy()
             pred = np.argmax(pred, axis=1)
-            self.save_img(image,target,pred,name)
+            self.save_img(ori,target,pred,name)
             # Add batch sample into evaluator
             self.evaluator.add_batch(target, pred)
             # print('===>Iteration  %d/%d' % (i,num_img_tr))
@@ -89,7 +150,6 @@ class Valuator(object):
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
         num_image = len(labels)
-        images = images.transpose(0,2,3,1) + self.args.normal_mean
         labels = decode_seg_map_sequence(labels).cpu().numpy().transpose(0,2,3,1)
         predictions = decode_seg_map_sequence(predictions).cpu().numpy().transpose(0,2,3,1)
         for i in range(num_image):

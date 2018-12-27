@@ -56,8 +56,7 @@ class GenDataset(Dataset):
     def _make_img_gt_point_pair(self, index):
         _img = Image.open(self.images[index]).convert('RGB')
         _target = Image.open(self.categories[index])
-        if _target.mode == 'RGB':
-            _target = _target.convert('L')
+        assert(_target.mode == 'L' or _target.mode == 'P')
         return _img, _target
 
     def transform_tr(self, sample):

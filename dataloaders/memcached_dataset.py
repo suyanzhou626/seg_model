@@ -12,14 +12,15 @@ import linklink as link
 def pil_loader(img_str):
     buff = io.BytesIO(img_str)
     
-    with Image.open(buff) as img:
-        img = img.convert('RGB')
+    img = Image.open(buff)
+    img = img.convert('RGB')
     return img
 
 def pil_loader_label(img_str):
     buff = io.BytesIO(img_str)
-    with Image.open(buff) as img:
-        img = img.convert('L')
+    img = Image.open(buff)
+    assert(img.mode=='L' or img.mode=='P')
+    # img = img.convert('L')
     return img
  
 class McDataset(Dataset):
