@@ -7,10 +7,7 @@ import cv2
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 from torchvision import transforms
-from modeling.v23 import V23_4x
-from modeling.vnet3_360 import Vnet3_360
-from modeling.dbl import Dbl
-from modeling.msc import MSC
+from modeling import network_map
 from dataloaders.utils import decode_seg_map_sequence
 from utils.metrics import Evaluator
 
@@ -146,7 +143,6 @@ def main():
                         help='put the path to resuming file if needed')
 
 
-    network_map = {'v23_4x':V23_4x,'vnet3_360':Vnet3_360,'dbl':Dbl,'msc':MSC}
     args = parser.parse_args()
     args.batch_size = 1
     args.network = network_map[args.backbone]

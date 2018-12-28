@@ -6,10 +6,7 @@ import PIL.Image as img
 import cv2
 from torch.utils.data import DataLoader,Dataset
 from dataloaders import custom_transforms as tr
-from modeling.v23 import V23_4x
-from modeling.vnet3_360 import Vnet3_360
-from modeling.dbl import Dbl
-from modeling.msc import MSC
+from modeling import network_map
 from torchvision import transforms
 from modeling.sync_batchnorm.replicate import patch_replication_callback
 from dataloaders.utils import decode_seg_map_sequence
@@ -59,7 +56,12 @@ class GenDataset(Dataset):
     def _make_img_gt_point_pair(self, index):
         _img = img.open(self.images[index]).convert('RGB')
         _target = img.open(self.categories[index])
-        assert(_target.mode == 'L' or _target.mode == 'P')
+        if (_target.mode != 'L' and _target.mode != 'P'):
+            temp = np.unique(np.array(_target))
+            if np.max(temp)<self.args.num_classes:
+                _target = _target.convert('L')
+            else:
+                raise 'error in %s' % self.categories[index]
         return _img, _target
 
     def transform_vis(self,sample):
@@ -216,7 +218,6 @@ def main():
                         help='put the path to resuming file if needed')
 
 
-    network_map = {'v23_4x':V23_4x,'vnet3_360':Vnet3_360,'dbl':Dbl,'msc':MSC}
     args = parser.parse_args()
     args.network = network_map[args.backbone]
     args.cuda = not args.no_cuda and torch.cuda.is_available()    

@@ -6,10 +6,7 @@ import time
 import linklink as link
 from torch.utils.data import DataLoader
 
-from modeling.v23 import V23_4x
-from modeling.vnet3_360 import Vnet3_360
-from modeling.dbl import Dbl
-from modeling.msc import MSC
+from modeling import network_map
 from dataloaders.memcached_dataset import McDataset
 from utils.loss import SegmentationLosses
 from utils.calculate_weights import calculate_weigths_labels
@@ -54,7 +51,7 @@ class Trainer(object):
         self.val_set = McDataset(self.args,self.args.val_list,split='val')
 
         self.train_sampler = DistributedSampler(self.train_set)
-        self.val_sampler = DistributedSampler(self.val_set,round_up=False)
+        self.val_sampler = DistributedSampler(self.val_set,round_up=True)
 
         self.train_loader = DataLoader(self.train_set,batch_size=self.args.batch_size,sampler=self.train_sampler)
         self.val_loader = DataLoader(self.val_set,batch_size=self.args.batch_size,sampler=self.val_sampler)
@@ -327,7 +324,6 @@ def main():
                         help='evaluuation interval (default: 1)')
     parser.add_argument('--use_link',action='store_true',default=True)
 
-    network_map = {'v23_4x':V23_4x,'vnet3_360':Vnet3_360,'dbl':Dbl,'msc':MSC}
     args = parser.parse_args()
     args.network = network_map[args.backbone]
     args.cuda = not args.no_cuda and torch.cuda.is_available()    

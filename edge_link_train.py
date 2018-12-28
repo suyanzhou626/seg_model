@@ -10,11 +10,7 @@ from torch.utils.data import DataLoader,Dataset
 from dataloaders import custom_transforms as tr
 from torchvision import transforms
 import io
-from modeling.v23 import V23_4x
-from modeling.vnet3_360 import Vnet3_360
-from modeling.dbl import Dbl
-from modeling.msc import MSC
-from modeling.hed import HED_vgg16
+from modeling import network_map
 from utils.loss import SegmentationLosses
 from utils.calculate_weights import calculate_weigths_labels
 from utils.lr_scheduler import LR_Scheduler
