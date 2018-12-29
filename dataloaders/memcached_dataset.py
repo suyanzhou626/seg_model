@@ -19,7 +19,12 @@ def pil_loader(img_str):
 def pil_loader_label(img_str):
     buff = io.BytesIO(img_str)
     img = Image.open(buff)
-    assert(img.mode=='L' or img.mode=='P')
+    if (img.mode != 'L' and img.mode != 'P'):
+            temp = np.unique(np.array(img))
+            if np.max(temp)<15:
+                img = img.convert('L')
+            else:
+                raise 'error'
     # img = img.convert('L')
     return img
  

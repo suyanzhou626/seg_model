@@ -56,7 +56,12 @@ class GenDataset(Dataset):
     def _make_img_gt_point_pair(self, index):
         _img = Image.open(self.images[index]).convert('RGB')
         _target = Image.open(self.categories[index])
-        assert(_target.mode == 'L' or _target.mode == 'P')
+        if (_target.mode != 'L' and _target.mode != 'P'):
+            temp = np.unique(np.array(_target))
+            if np.max(temp)<self.args.num_classes:
+                _target = _target.convert('L')
+            else:
+                raise 'error in %s' % self.categories[index]
         return _img, _target
 
     def transform_tr(self, sample):
