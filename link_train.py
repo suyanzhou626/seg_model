@@ -5,7 +5,7 @@ import torch
 import time
 import linklink as link
 from torch.utils.data import DataLoader
-
+from collections import OrderedDict
 from modeling import network_map
 from dataloaders.memcached_dataset import McDataset
 from utils.loss import SegmentationLosses
@@ -108,7 +108,14 @@ class Trainer(object):
                 raise RuntimeError("=> no checkpoint found at '{}'" .format(self.args.resume))
             checkpoint = torch.load(self.args.resume)
             self.args.start_epoch = checkpoint['epoch']
-            self.model.load_state_dict(checkpoint['state_dict'])
+            new_state_dict = OrderedDict()
+            for k,v in checkpoint['state_dict'].items():
+                if 'module' in k:
+                    name = k[7:]
+                else:
+                    name = k
+                new_state_dict[name] = v
+            self.model.load_state_dict(new_state_dict)
             if not self.args.ft:
                 self.optimizer.load_state_dict(checkpoint['optimizer'])
             self.best_pred = checkpoint['best_pred']

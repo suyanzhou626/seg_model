@@ -10,7 +10,7 @@ from torchvision import transforms
 from modeling import network_map
 from dataloaders.utils import decode_seg_map_sequence
 from utils.metrics import Evaluator
-
+from collections import OrderedDict
 class Normalize(object):
     """Normalize a tensor image with mean and standard deviation.
     Args:
@@ -80,7 +80,14 @@ class Valuator(object):
         if not os.path.isfile(self.args.resume):
             raise RuntimeError("=> no checkpoint found at '{}'" .format(self.args.resume))
         checkpoint = torch.load(self.args.resume)
-        self.model.load_state_dict(checkpoint['state_dict'])
+        new_state_dict = OrderedDict()
+        for k,v in checkpoint['state_dict'].items():
+            if 'module' in k:
+                name = k[7:]
+            else:
+                name = k
+            new_state_dict[name] = v
+        self.model.load_state_dict(new_state_dict)
         print("=> loaded checkpoint '{}' (epoch {})"
                 .format(self.args.resume, checkpoint['epoch']))
     
@@ -114,7 +121,7 @@ class Valuator(object):
             pred = np.argmax(pred, axis=1)
             pred = np.ones(pred.shape) - pred
             label = decode_seg_map_sequence(pred).cpu().numpy().transpose([0,2,3,1])
-            label = label[:,:,:,::-1]
+            label = label[:,:,:,::-1] # convert to BGR
             pred = np.stack([pred,pred,pred],axis=3)
             ori[pred==1] = 0
             label[pred==0] = 0

@@ -14,6 +14,8 @@ def pil_loader(img_str):
     
     img = Image.open(buff)
     img = img.convert('RGB')
+    temp = np.array(img)[:,:,::-1].copy()  #convert to BGR
+    img = Image.fromarray(temp.astype(dtype=np.uint8),mode='RGB')
     return img
 
 def pil_loader_label(img_str):

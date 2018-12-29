@@ -55,6 +55,8 @@ class GenDataset(Dataset):
 
     def _make_img_gt_point_pair(self, index):
         _img = Image.open(self.images[index]).convert('RGB')
+        temp = np.array(_img)[:,:,::-1].copy()  #convert to BGR
+        _img = Image.fromarray(temp.astype(dtype=np.uint8),mode='RGB')
         _target = Image.open(self.categories[index])
         if (_target.mode != 'L' and _target.mode != 'P'):
             temp = np.unique(np.array(_target))

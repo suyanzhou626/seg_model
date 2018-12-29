@@ -12,6 +12,7 @@ from modeling.sync_batchnorm.replicate import patch_replication_callback
 from dataloaders.utils import decode_seg_map_sequence
 from modeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
 from utils.metrics import Evaluator
+from collections import OrderedDict
 class GenDataset(Dataset):
     def __init__(self,args,data_list,split='train'):
         super().__init__()
@@ -55,6 +56,8 @@ class GenDataset(Dataset):
 
     def _make_img_gt_point_pair(self, index):
         _img = img.open(self.images[index]).convert('RGB')
+        temp = np.array(_img)[:,:,::-1].copy()  #convert to BGR
+        _img = img.fromarray(temp.astype(dtype=np.uint8),mode='RGB')
         _target = img.open(self.categories[index])
         if (_target.mode != 'L' and _target.mode != 'P'):
             temp = np.unique(np.array(_target))
@@ -102,10 +105,17 @@ class Valuator(object):
         if not os.path.isfile(self.args.resume):
             raise RuntimeError("=> no checkpoint found at '{}'" .format(self.args.resume))
         checkpoint = torch.load(self.args.resume)
+        new_state_dict = OrderedDict()
+        for k,v in checkpoint['state_dict'].items():
+            if 'module' in k:
+                name = k[7:]
+            else:
+                name = k
+            new_state_dict[name] = v
         if self.args.cuda:
-            self.model.module.load_state_dict(checkpoint['state_dict'])
+            self.model.module.load_state_dict(new_state_dict)
         else:
-            self.model.load_state_dict(checkpoint['state_dict'])
+            self.model.load_state_dict(new_state_dict)
         print("=> loaded checkpoint '{}' (epoch {})"
                 .format(self.args.resume, checkpoint['epoch']))
 
@@ -160,6 +170,7 @@ class Valuator(object):
                 name = str(name)
             save_name = os.path.join(save_dir,name+'.png')
             image = images[i,:,:,:]
+            image = image[:,:,::-1].copy() #convert to RGB
             label_mask = labels[i,:,:,:]
             prediction = predictions[i,:,:,:]
             if image.shape != label_mask.shape:
