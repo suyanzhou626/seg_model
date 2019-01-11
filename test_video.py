@@ -26,6 +26,19 @@ class Normalize(object):
 
         return img
 
+class ToTensor(object):
+    """Convert ndarrays in sample to Tensors."""
+
+    def __call__(self, img):
+        # swap color axis because
+        # numpy image: H x W x C
+        # torch image: C X H X W
+        img = np.array(img).astype(np.float32).transpose((2, 0, 1))
+
+        img = torch.from_numpy(img).float()
+
+        return img
+
 
 class VideoDataset(Dataset):
     def __init__(self,video_path):
@@ -56,7 +69,7 @@ class VideoDataset(Dataset):
     def transform_val(self, sample):
         composed_transforms = transforms.Compose([
             Normalize([104.008,116.669,122.675]),
-            transforms.ToTensor()
+            ToTensor()
             ])
 
         return composed_transforms(sample)
