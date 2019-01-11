@@ -144,7 +144,11 @@ class Valuator(object):
             image = image.cpu().numpy()
             ori = ori.cpu().numpy()
             pred = np.argmax(pred, axis=1)
-            self.save_img(ori,target,pred,name)
+            if num_img_tr > 100:
+                if i % (num_img_tr // 100) == 0:
+                    self.save_img(ori,target,pred,name)
+            else:
+                self.save_img(ori,target,pred,name)
             # Add batch sample into evaluator
             self.evaluator.add_batch(target, pred)
             # print('===>Iteration  %d/%d' % (i,num_img_tr))
