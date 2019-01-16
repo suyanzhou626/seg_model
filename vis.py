@@ -68,11 +68,14 @@ class GenDataset(Dataset):
         return _img, _target
 
     def transform_vis(self,sample):
+        pre_trans = tr.Resize(self.args.crop_size)
+        temp = pre_trans(sample)
         composed_transforms = transforms.Compose([
             tr.Normalize(mean=self.args.normal_mean),
             tr.ToTensor()
         ])
-        return composed_transforms(sample)
+        res = composed_transforms({'image':temp['image'],'label':temp['label']})
+        return {'image':res['image'],'label':res['label'],'ow':temp['ow'],'oh':temp['oh']}
 
     def __len__(self):
         return len(self.images)
@@ -130,7 +133,7 @@ class Valuator(object):
         num_img_tr = len(vis_loader)
         print('=====>[numImages: %5d]' % (num_img_tr * self.args.batch_size))
         for i, sample in enumerate(vis_loader):
-            image, target ,name, ori = sample['image'], sample['label'], sample['name'], sample['ori']
+            image, target ,name, ori,ow,oh = sample['image'], sample['label'], sample['name'], sample['ori'],sample['ow'], sample['oh']
             if self.args.cuda:
                 image, target = image.cuda(), target.cuda()
             with torch.no_grad():
@@ -138,7 +141,8 @@ class Valuator(object):
                     _,output = self.model(image)
                 else:
                     output = self.model(image)
-
+            output = output[:,:,0:oh[0].item(),0:ow[0].item()]
+            output = torch.nn.functional.interpolate(output,size=target.size()[1:],mode='bilinear',align_corners=True)
             pred = output.data.cpu().numpy()
             target = target.cpu().numpy()
             image = image.cpu().numpy()
@@ -216,7 +220,8 @@ def main():
     parser.add_argument('--vis_list',type=str,default=None,help='path to val.txt')
     parser.add_argument('--normal_mean',type=float, nargs='*',default=[104.008,116.669,122.675])
     parser.add_argument('--num_classes',type=int,default=None,help='the number of classes')
-
+    parser.add_argument('--crop_size', type=int, default=225,
+                        help='crop image size')
     # training hyper params
 
     parser.add_argument('--batch_size', type=int, default=None,

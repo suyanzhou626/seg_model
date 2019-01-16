@@ -80,12 +80,18 @@ class McDataset(Dataset):
         return sample
 
     def transform_tr(self, sample):
-        composed_transforms = transforms.Compose([
-            tr.RandomScaleCrop(crop_size=self.args.crop_size),
-            tr.RandomHorizontalFlip(),
-            tr.RandomGaussianBlur(),
-            tr.Normalize(mean=self.args.normal_mean),
-            tr.ToTensor()])
+        temp = []
+        if self.args.rotate is not None:
+            temp.append(tr.RandomRotate(degree=self.args.rotate))
+        temp.append(tr.RandomScaleCrop(crop_size=self.args.crop_size,rand_resize=self.args.rand_resize))
+        temp.append(tr.RandomHorizontalFlip())
+        if self.args.blur == True:
+            temp.append(tr.RandomGaussianBlur())
+        temp.append(tr.Normalize(mean=self.args.normal_mean))
+        if self.args.noise_param is not None:
+            temp.append(tr.GaussianNoise(mean=self.args.noise_param[0],std=self.args.noise_param[1]))
+        temp.append(tr.ToTensor())
+        composed_transforms = transforms.Compose(temp)
 
         return composed_transforms(sample)
 

@@ -279,6 +279,10 @@ def main():
     parser.add_argument('--crop_size', type=int, default=225,
                         help='crop image size')
     parser.add_argument('--normal_mean',type=float, nargs='*',default=[104.008,116.669,122.675])
+    parser.add_argument('--rand_resize',type=float, nargs='*',default=[0.75,1.25])
+    parser.add_argument('--rotate',type=int,default=None)
+    parser.add_argument('--noise_param',type=float,nargs='*',default=None)
+    parser.add_argument('--blur',action='store_true',default=True)
     parser.add_argument('--num_classes',type=int,default=None,help='the number of classes')
     parser.add_argument('--loss_type', type=str, default='ce',
                         choices=['ce', 'focal'],

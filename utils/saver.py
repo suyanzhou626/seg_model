@@ -58,24 +58,24 @@ class Saver(object):
     def save_experiment_config(self):
         logfile = os.path.join(self.experiment_dir, 'parameters.txt')
         log_file = open(logfile, 'w')
-        p = OrderedDict()
-        p['backbone'] = self.args.backbone
-        p['datset'] = self.args.dataset
-        p['lr'] = self.args.lr
-        p['optim'] = self.args.optim_method
-        p['nesterov'] = self.args.nesterov
-        p['momentum'] = self.args.momentum
-        p['weight_decay'] = self.args.weight_decay
-        p['fine tune'] = str(self.args.ft)
-        p['nclasses'] = self.args.num_classes
-        p['batchsize'] = self.args.batch_size
-        p['class_balance'] = str(self.args.use_balanced_weights)
-        p['lr_scheduler'] = self.args.lr_scheduler
-        p['loss_type'] = self.args.loss_type
-        p['sync_bn'] = str(self.args.sync_bn)
-        p['epoch'] = self.args.epochs
-        p['crop_size'] = self.args.crop_size
-        p['link'] = str(self.args.use_link)
+        p = self.args.__dict__
+        # p['backbone'] = self.args.backbone
+        # p['datset'] = self.args.dataset
+        # p['lr'] = self.args.lr
+        # p['optim'] = self.args.optim_method
+        # p['nesterov'] = self.args.nesterov
+        # p['momentum'] = self.args.momentum
+        # p['weight_decay'] = self.args.weight_decay
+        # p['fine tune'] = str(self.args.ft)
+        # p['nclasses'] = self.args.num_classes
+        # p['batchsize'] = self.args.batch_size
+        # p['class_balance'] = str(self.args.use_balanced_weights)
+        # p['lr_scheduler'] = self.args.lr_scheduler
+        # p['loss_type'] = self.args.loss_type
+        # p['sync_bn'] = str(self.args.sync_bn)
+        # p['epoch'] = self.args.epochs
+        # p['crop_size'] = self.args.crop_size
+        # p['link'] = str(self.args.use_link)
 
         for key, val in p.items():
             log_file.write(key + ':' + str(val) + '\n')

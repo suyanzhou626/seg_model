@@ -2,7 +2,7 @@ import argparse
 import os
 import numpy as np
 import torch
-import PIL.Image as img
+from PIL import Image, ImageOps, ImageFilter
 import cv2
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
@@ -25,7 +25,24 @@ class Normalize(object):
         img /= 255.0
 
         return img
-
+class Resize(object):
+    def __init__(self,target_size):
+        self.size = target_size[0] if isinstance(target_size,list) else target_size
+    
+    def __call__(self,img):
+        w, h = img.size
+        if h < w:
+            ow = self.size
+            oh = int(1.0 * h * ow / w)
+        else:
+            oh = self.size
+            ow = int(1.0 * w * oh / h)
+        img = img.resize((ow, oh), Image.BILINEAR)
+        padh = self.size - oh if oh < self.size else 0
+        padw = self.size - ow if ow < self.size else 0
+        img = ImageOps.expand(img, border=(0, 0, padw, padh), fill=0)
+        return {'image': img,
+                'ow':ow,'oh':oh}
 class ToTensor(object):
     """Convert ndarrays in sample to Tensors."""
 
@@ -41,7 +58,7 @@ class ToTensor(object):
 
 
 class VideoDataset(Dataset):
-    def __init__(self,video_path):
+    def __init__(self,args,video_path):
         super().__init__()
         cap = cv2.VideoCapture(video_path)
         self.wid = int(cap.get(3))
@@ -49,6 +66,7 @@ class VideoDataset(Dataset):
         self.framerate = int(cap.get(5))
         self.framenum = int(cap.get(7))
         self.images = []
+        self.args = args
         cnt = 0
         while(cap.isOpened()):
             a,b=cap.read()
@@ -61,18 +79,21 @@ class VideoDataset(Dataset):
         print('this video({}) has %d frame(%d)'.format(video_path) % (self.framenum,cnt))
     def __getitem__(self, index):
         _img = self.images[index]
-        input_image = self.transform_val(_img)
+        temp = Image.fromarray(_img,mode='RGB')
+        input_image = self.transform_val(temp)
         _img = torch.from_numpy(_img)
-        sample = {'input':input_image,'ori':_img}
+        sample = {'input':input_image['image'],'ori':_img,'ow':input_image['ow'],'oh':input_image['oh']}
         return sample
 
     def transform_val(self, sample):
+        pre_trans = Resize(self.args.crop_size)
+        temp = pre_trans(sample)
         composed_transforms = transforms.Compose([
-            Normalize([104.008,116.669,122.675]),
+            Normalize(mean=self.args.normal_mean),
             ToTensor()
-            ])
-
-        return composed_transforms(sample)
+        ])
+        res = composed_transforms(temp['image'])
+        return {'image':res,'ow':temp['ow'],'oh':temp['oh']}
 
     def __len__(self):
         return self.framenum
@@ -110,7 +131,7 @@ class Valuator(object):
     def visual(self,video_path):
         self.model.eval()
         print('\nvisualizing')
-        vis_set = VideoDataset(video_path)
+        vis_set = VideoDataset(self.args,video_path)
         fourcc = cv2.VideoWriter_fourcc(*'MJPG') #opencv3.0
         save_name = os.path.join(self.args.save_dir,video_path.split('/')[-1].split('.')[0])
         if not os.path.exists(save_name):
@@ -120,15 +141,15 @@ class Valuator(object):
         num_img_tr = len(vis_loader)
         print('=====>[frames: %5d]' % (num_img_tr * self.args.batch_size))
         for i, sample in enumerate(vis_loader):
-            image, ori = sample['input'],sample['ori']
-            if self.args.cuda:
-                image = image.cuda()
+            image, ori, ow,oh = sample['input'],sample['ori'],sample['ow'], sample['oh']
+            image = image.cuda()
             with torch.no_grad():
                 if self.args.backbone == 'dbl':
                     _,output = self.model(image)
                 else:
                     output = self.model(image)
-
+            output = output[:,:,0:oh[0].item(),0:ow[0].item()]
+            output = torch.nn.functional.interpolate(output,size=ori.size()[1:3],mode='bilinear',align_corners=True)
             pred = output.data.cpu().numpy()
             ori = ori.cpu().numpy()
             pred = np.argmax(pred, axis=1)
@@ -150,7 +171,9 @@ def main():
     parser.add_argument('--backbone',type=str,default=None,help='choose the network') 
     parser.add_argument('--test_path',type=str,default=None,help='path to val.txt')
     parser.add_argument('--num_classes',type=int,default=None,help='the number of classes')
-
+    parser.add_argument('--crop_size', type=int, default=225,
+                        help='crop image size')
+    parser.add_argument('--normal_mean',type=float, nargs='*',default=[104.008,116.669,122.675])
     # training hyper params
 
     parser.add_argument('--save_dir',type=str,default=None,help='path to save model')
