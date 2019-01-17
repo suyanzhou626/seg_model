@@ -65,10 +65,10 @@ class V23_4x(nn.Module):
         x = self.last_conv1(x)
         x = torch.nn.functional.interpolate(x,scale_factor=4,mode='bilinear',align_corners=True)
         out = self.branch(out)
-        out = torch.nn.functional.interpolate(out,size=x.size()[2:],mode='bilinear',align_corners=True)
+        out = torch.nn.functional.interpolate(out,size=x.data.size()[2:],mode='bilinear',align_corners=True)
         x = torch.cat([x,out],dim=1)
         x = self.last_conv2(x)
-        x = torch.nn.functional.interpolate(x,size=input.size()[2:],mode='bilinear',align_corners=True)
+        x = torch.nn.functional.interpolate(x,size=input.data.size()[2:],mode='bilinear',align_corners=True)
         return x
 
     def get_conv_weight_params(self):
@@ -131,6 +131,6 @@ if __name__ == "__main__":
         num1 += 1
     print(num,num1)
     model.eval()
-    input = torch.rand(1, 3, 513,513)
+    input = torch.rand(1, 3, 225,225)
     output = model(input)
     print(output.size())

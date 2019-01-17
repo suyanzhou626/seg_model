@@ -22,7 +22,7 @@ class Normalize(object):
     def __call__(self, img):
         img = np.array(img).astype(np.float32)
         img -= self.mean
-        img /= 255.0
+#        img /= 255.0
 
         return img
 class Resize(object):

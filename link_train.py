@@ -54,7 +54,7 @@ class Trainer(object):
         self.val_sampler = DistributedSampler(self.val_set,round_up=True)
 
         self.train_loader = DataLoader(self.train_set,batch_size=self.args.batch_size,sampler=self.train_sampler)
-        self.val_loader = DataLoader(self.val_set,batch_size=self.args.batch_size,sampler=self.val_sampler)
+        self.val_loader = DataLoader(self.val_set,batch_size=1,sampler=self.val_sampler)
         self.nclass = self.args.num_classes
         weight = torch.from_numpy(np.zeros((self.nclass,))).type(torch.FloatTensor)
 

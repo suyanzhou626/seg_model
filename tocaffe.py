@@ -18,7 +18,7 @@ class ToCaffe(object):
         # Resuming checkpoint
         if not os.path.isfile(self.args.resume):
             raise RuntimeError("=> no checkpoint found at '{}'" .format(self.args.resume))
-        checkpoint = torch.load(self.args.resume,map_location=lambda storage, loc: storage)
+        checkpoint = torch.load(self.args.resume)
         new_state_dict = OrderedDict()
         for k,v in checkpoint['state_dict'].items():
             if 'module' in k:
@@ -26,7 +26,9 @@ class ToCaffe(object):
             else:
                 name = k
             new_state_dict[name] = v
+        self.model = self.model.cuda()
         self.model.load_state_dict(new_state_dict)
+        self.model = self.model.cpu()
         print("=> loaded checkpoint '{}' (epoch {})"
                 .format(self.args.resume, checkpoint['epoch']))
 
