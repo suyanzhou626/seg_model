@@ -74,7 +74,7 @@ class GenDataset(Dataset):
         temp.append(tr.RandomHorizontalFlip())
         if self.args.blur == True:
             temp.append(tr.RandomGaussianBlur())
-        temp.append(tr.Normalize(mean=self.args.normal_mean))
+        temp.append(tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std))
         if self.args.noise_param is not None:
             temp.append(tr.GaussianNoise(mean=self.args.noise_param[0],std=self.args.noise_param[1]))
         temp.append(tr.ToTensor())
@@ -86,14 +86,14 @@ class GenDataset(Dataset):
 
         composed_transforms = transforms.Compose([
             tr.FixScaleCrop(crop_size=self.args.crop_size),
-            tr.Normalize(mean=self.args.normal_mean),
+            tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std),
             tr.ToTensor()])
 
         return composed_transforms(sample)
 
     def transform_vis(self,sample):
         composed_transforms = transforms.Compose([
-            tr.Normalize(mean=self.args.normal_mean),
+            tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std),
             tr.ToTensor()
         ])
         return composed_transforms(sample)

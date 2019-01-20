@@ -17,12 +17,13 @@ class Normalize(object):
         mean (tuple): means for each channel.
         std (tuple): standard deviations for each channel.
     """
-    def __init__(self, mean=(0., 0., 0.)):
+    def __init__(self, mean=(0., 0., 0.),std=1.0):
         self.mean = mean
+        self.std = std
     def __call__(self, img):
         img = np.array(img).astype(np.float32)
         img -= self.mean
-#        img /= 255.0
+        img /= self.std
 
         return img
 class Resize(object):
@@ -89,7 +90,7 @@ class VideoDataset(Dataset):
         pre_trans = Resize(self.args.crop_size)
         temp = pre_trans(sample)
         composed_transforms = transforms.Compose([
-            Normalize(mean=self.args.normal_mean),
+            Normalize(mean=self.args.normal_mean,std=self.args.normal_std),
             ToTensor()
         ])
         res = composed_transforms(temp['image'])
@@ -174,6 +175,7 @@ def main():
     parser.add_argument('--crop_size', type=int, default=225,
                         help='crop image size')
     parser.add_argument('--normal_mean',type=float, nargs='*',default=[104.008,116.669,122.675])
+    parser.add_argument('--normal_std',type=float,default=1.0)
     # training hyper params
 
     parser.add_argument('--save_dir',type=str,default=None,help='path to save model')

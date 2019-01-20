@@ -71,7 +71,7 @@ class GenDataset(Dataset):
         pre_trans = tr.Resize(self.args.crop_size)
         temp = pre_trans(sample)
         composed_transforms = transforms.Compose([
-            tr.Normalize(mean=self.args.normal_mean),
+            tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std),
             tr.ToTensor()
         ])
         res = composed_transforms({'image':temp['image'],'label':temp['label']})
@@ -219,6 +219,7 @@ def main():
                         help='path to dataset which add the *.txt is the image path')
     parser.add_argument('--vis_list',type=str,default=None,help='path to val.txt')
     parser.add_argument('--normal_mean',type=float, nargs='*',default=[104.008,116.669,122.675])
+    parser.add_argument('--normal_std',type=float,default=1.0)
     parser.add_argument('--num_classes',type=int,default=None,help='the number of classes')
     parser.add_argument('--crop_size', type=int, default=225,
                         help='crop image size')

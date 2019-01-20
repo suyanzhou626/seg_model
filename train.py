@@ -197,7 +197,7 @@ class Trainer(object):
         self.writer.add_scalar('val/Acc', Acc, epoch)
         self.writer.add_scalar('val/Acc_class', Acc_class, epoch)
         self.writer.add_scalar('val/fwIoU', FWIoU, epoch)
-        print('=====>[Epoch: %d, numImages: %5d   previous best=%.4f    time_consuming: %d]' % (epoch, num_img_tr * self.args.batch_size,self.best_pred,(stop_time-start_time)))
+        print('=====>[Epoch: %d, numImages: %5d   previous best=%.4f    time_consuming: %d]' % (epoch, num_img_tr * self.args.gpus,self.best_pred,(stop_time-start_time)))
         print("Acc:{}, Acc_class:{}, mIoU:{}, fwIoU: {}".format(Acc, Acc_class, mIoU, FWIoU))
         print('Loss: %.3f\n\n' % (test_loss/num_img_tr))
 
@@ -227,10 +227,11 @@ def main():
     parser.add_argument('--crop_size', type=int, default=225,
                         help='crop image size')
     parser.add_argument('--normal_mean',type=float, nargs='*',default=[104.008,116.669,122.675])
+    parser.add_argument('--normal_std',type=float,default=1.0)
     parser.add_argument('--rand_resize',type=float, nargs='*',default=[0.75,1.25])
     parser.add_argument('--rotate',type=int,default=None)
     parser.add_argument('--noise_param',type=float,nargs='*',default=None)
-    parser.add_argument('--blur',action='store_true',default=True)
+    parser.add_argument('--blur',action='store_true',default=False)
     parser.add_argument('--num_classes',type=int,default=None,help='the number of classes')
     parser.add_argument('--loss_type', type=str, default='ce',
                         choices=['ce', 'focal'],
