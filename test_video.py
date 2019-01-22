@@ -172,7 +172,7 @@ def main():
     parser.add_argument('--backbone',type=str,default=None,help='choose the network') 
     parser.add_argument('--test_path',type=str,default=None,help='path to val.txt')
     parser.add_argument('--num_classes',type=int,default=None,help='the number of classes')
-    parser.add_argument('--crop_size', type=int, default=225,
+    parser.add_argument('--crop_size', type=int, default=None,
                         help='crop image size')
     parser.add_argument('--normal_mean',type=float, nargs='*',default=[104.008,116.669,122.675])
     parser.add_argument('--normal_std',type=float,default=1.0)

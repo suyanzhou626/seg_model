@@ -24,6 +24,8 @@ class Saver(object):
         filename = os.path.join(self.experiment_dir, filename)
         torch.save(state, filename)
         if is_best:
+            filename_best = os.path.join(self.experiment_dir,'best.pth.tar')
+            torch.save(state,filename_best)
             best_pred = state['best_pred']
             with open(os.path.join(self.experiment_dir, 'best_pred.txt'), 'w') as f:
                 f.write(str(best_pred))

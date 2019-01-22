@@ -137,11 +137,12 @@ class Trainer(object):
             if i % self.args.display_iter == 0:
                 Acc_train = self.evaluator_inner.Pixel_Accuracy()
                 Acc_class_train = self.evaluator_inner.Pixel_Accuracy_Class()
-                mIoU_train = self.evaluator_inner.Mean_Intersection_over_Union()
+                mIoU_train,IoU_train = self.evaluator_inner.Mean_Intersection_over_Union()
                 FWIoU_train = self.evaluator_inner.Frequency_Weighted_Intersection_over_Union()
                 print('\n===>Iteration  %d/%d    learning_rate: %.6f   metric:' % (i,num_img_tr,current_lr))
                 print('=>Train loss: %.4f    acc: %.4f     m_acc: %.4f     miou: %.4f     fwiou: %.4f' % (loss.item(),
                                                                                     Acc_train,Acc_class_train,mIoU_train,FWIoU_train))
+                print("IoU per class: ",IoU_train)
                 self.evaluator_inner.reset()
             
             self.writer.add_scalar('train/total_loss_iter', loss.item(), i + num_img_tr * epoch)
@@ -190,7 +191,7 @@ class Trainer(object):
         # Fast test during the training
         Acc = self.evaluator.Pixel_Accuracy()
         Acc_class = self.evaluator.Pixel_Accuracy_Class()
-        mIoU = self.evaluator.Mean_Intersection_over_Union()
+        mIoU,IoU = self.evaluator.Mean_Intersection_over_Union()
         FWIoU = self.evaluator.Frequency_Weighted_Intersection_over_Union()
         self.writer.add_scalar('val/total_loss_epoch', test_loss/num_img_tr, epoch)
         self.writer.add_scalar('val/mIoU', mIoU, epoch)
@@ -199,18 +200,21 @@ class Trainer(object):
         self.writer.add_scalar('val/fwIoU', FWIoU, epoch)
         print('=====>[Epoch: %d, numImages: %5d   previous best=%.4f    time_consuming: %d]' % (epoch, num_img_tr * self.args.gpus,self.best_pred,(stop_time-start_time)))
         print("Acc:{}, Acc_class:{}, mIoU:{}, fwIoU: {}".format(Acc, Acc_class, mIoU, FWIoU))
+        print("IoU per class: ",IoU)
         print('Loss: %.3f\n\n' % (test_loss/num_img_tr))
 
         new_pred = mIoU
         if new_pred > self.best_pred:
             is_best = True
             self.best_pred = new_pred
-            self.saver.save_checkpoint({
-                'epoch': epoch + 1,
-                'state_dict': self.model.module.state_dict(),
-                'optimizer': self.optimizer.state_dict(),
-                'best_pred': self.best_pred,
-            }, is_best)
+        else:
+            is_best = False
+        self.saver.save_checkpoint({
+            'epoch': epoch + 1,
+            'state_dict': self.model.module.state_dict(),
+            'optimizer': self.optimizer.state_dict(),
+            'best_pred': new_pred,
+        }, is_best)
 
 def main():
     parser = argparse.ArgumentParser(description="PyTorch vnet Training")
@@ -224,8 +228,9 @@ def main():
                         help='path to dataset which add the *.txt is the image path')
     parser.add_argument('--train_list',type=str,default=None,help='path to train.txt')
     parser.add_argument('--val_list',type=str,default=None,help='path to val.txt')
-    parser.add_argument('--crop_size', type=int, default=225,
+    parser.add_argument('--crop_size', type=int, default=None,
                         help='crop image size')
+    parser.add_argument('--test_size',type=int,default=None)
     parser.add_argument('--normal_mean',type=float, nargs='*',default=[104.008,116.669,122.675])
     parser.add_argument('--normal_std',type=float,default=1.0)
     parser.add_argument('--rand_resize',type=float, nargs='*',default=[0.75,1.25])

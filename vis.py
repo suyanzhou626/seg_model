@@ -161,9 +161,10 @@ class Valuator(object):
         # Fast test during the training
         Acc = self.evaluator.Pixel_Accuracy()
         Acc_class = self.evaluator.Pixel_Accuracy_Class()
-        mIoU = self.evaluator.Mean_Intersection_over_Union()
+        mIoU,IoU = self.evaluator.Mean_Intersection_over_Union()
         FWIoU = self.evaluator.Frequency_Weighted_Intersection_over_Union()
         print("Acc:{}, Acc_class:{}, mIoU:{}, fwIoU: {}".format(Acc, Acc_class, mIoU, FWIoU))
+        print("IoU per class: ",IoU)
 
     def save_img(self,images,labels,predictions,names):
         save_dir = self.args.save_dir
@@ -221,7 +222,7 @@ def main():
     parser.add_argument('--normal_mean',type=float, nargs='*',default=[104.008,116.669,122.675])
     parser.add_argument('--normal_std',type=float,default=1.0)
     parser.add_argument('--num_classes',type=int,default=None,help='the number of classes')
-    parser.add_argument('--crop_size', type=int, default=225,
+    parser.add_argument('--crop_size', type=int, default=None,
                         help='crop image size')
     # training hyper params
 
