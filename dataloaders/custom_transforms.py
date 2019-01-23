@@ -190,9 +190,35 @@ class FixedResize(object):
         mask = sample['label']
 
         assert img.size == mask.size
-
+        
         img = img.resize(self.size, Image.BILINEAR)
         mask = mask.resize(self.size, Image.NEAREST)
 
+        return {'image': img,
+                'label': mask}
+
+class FixedResize_new(object):
+    def __init__(self,crop_size):
+        self.size = crop_size
+
+    def __call__(self,sample):
+        img = sample['image']
+        mask = sample['label']
+
+        assert img.size == mask.size
+
+        w, h = img.size
+        if h < w:
+            ow = self.size
+            oh = int(1.0 * h * ow / w)
+        else:
+            oh = self.size
+            ow = int(1.0 * w * oh / h)
+        img = img.resize((ow, oh), Image.BILINEAR)
+        mask = mask.resize((ow, oh), Image.NEAREST)
+        padh = self.size - oh if oh < self.size else 0
+        padw = self.size - ow if ow < self.size else 0
+        img = ImageOps.expand(img, border=(0, 0, padw, padh), fill=0)
+        mask = ImageOps.expand(mask,border=(0, 0, padw, padh), fill=0)
         return {'image': img,
                 'label': mask}

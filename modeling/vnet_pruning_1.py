@@ -2,17 +2,17 @@ import torch
 import torch.nn as nn
 from collections import OrderedDict
 BN = None
-BLOCK_PARAMETER=[{'layers':4,'planes':[3,32,32,32,32],'k_sizes':[7,3,3,3],'strides':[4,1,1,1],'pads':[3,1,1,1],'dilations':[1,1,1,1]},
-                 {'layers':4,'planes':[32,64,64,64,64],'k_sizes':[3,3,3,3],'strides':[2,1,1,1],'pads':[1,1,1,1],'dilations':[1,1,1,1]},
-                 {'layers':4,'planes':[64,128,128,128,128],'k_sizes':[3,3,3,3],'strides':[2,1,1,1],'pads':[1,1,1,1],'dilations':[1,1,1,1]},
-                 {'layers':4,'planes':[128,256,256,256,256],'k_sizes':[3,3,3,3],'strides':[2,1,1,1],'pads':[1,1,1,1],'dilations':[1,1,1,1]},
-                 {'layers':4,'planes':[256,256,256,256,256],'k_sizes':[3,3,3,3],'strides':[1,1,1,1],'pads':[1,1,1,1],'dilations':[1,1,1,1]}]
+BLOCK_PARAMETER=[{'layers':4,'planes':[3,24,24,24,24],'k_sizes':[7,3,3,3],'strides':[4,1,1,1],'pads':[3,1,1,1],'dilations':[1,1,1,1]},
+                 {'layers':4,'planes':[24,48,48,48,48],'k_sizes':[3,3,3,3],'strides':[2,1,1,1],'pads':[1,1,1,1],'dilations':[1,1,1,1]},
+                 {'layers':4,'planes':[48,96,96,96,96],'k_sizes':[3,3,3,3],'strides':[2,1,1,1],'pads':[1,1,1,1],'dilations':[1,1,1,1]},
+                 {'layers':4,'planes':[96,192,192,192,192],'k_sizes':[3,3,3,3],'strides':[2,1,1,1],'pads':[1,1,1,1],'dilations':[1,1,1,1]},
+                 {'layers':4,'planes':[192,192,192,192,192],'k_sizes':[3,3,3,3],'strides':[1,1,1,1],'pads':[1,1,1,1],'dilations':[1,1,1,1]}]
 FC_BLOCK={'layers':3,'planes':[48,64,64,64],'k_sizes':[1,1,1],'strides':[1,1,1],'pads':[0,0,0],'dilations':[1,1,1]}
 
-DECONV_PARAMETER=[{'layers':2,'planes':[512,128,128],'k_sizes':[3,3],'strides':[1,1],'pads':[1,1],'dilations':[1,1]},
-                  {'layers':2,'planes':[256,64,64],'k_sizes':[3,3],'strides':[1,1],'pads':[1,1],'dilations':[1,1]},
-                  {'layers':2,'planes':[128,32,32],'k_sizes':[3,3],'strides':[1,1],'pads':[1,1],'dilations':[1,1]},
-                  {'layers':2,'planes':[64,32,32],'k_sizes':[3,3],'strides':[1,1],'pads':[1,1],'dilations':[1,1]},]
+DECONV_PARAMETER=[{'layers':1,'planes':[384,96],'k_sizes':[3],'strides':[1],'pads':[1],'dilations':[1]},
+                  {'layers':1,'planes':[192,48],'k_sizes':[3],'strides':[1],'pads':[1],'dilations':[1]},
+                  {'layers':1,'planes':[96,24],'k_sizes':[3],'strides':[1],'pads':[1],'dilations':[1]},
+                  {'layers':1,'planes':[48,24],'k_sizes':[3],'strides':[1],'pads':[1],'dilations':[1]},]
 
 def conv_bn_relu(inplane,outplane,k_size,stride=1,pad=0,dilation=1):
     block = nn.Sequential(OrderedDict([('conv',nn.Conv2d(inplane,outplane,k_size,stride=stride,padding=pad,dilation=dilation)),
@@ -49,7 +49,7 @@ class Block(nn.Module):
         input = self.block(input)
         return input
 
-class Vnet3_360(nn.Module):
+class VnetPrun1(nn.Module):
     def __init__(self,args,block_parameter=None,fcblock_parameter=None,**kwards):
         super().__init__()
         global BN
@@ -126,7 +126,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     args.num_classes = 2
     args.batchnorm_function = torch.nn.BatchNorm2d
-    model = Vnet3_360(args)
+    model = VnetPrun1(args)
     tempa = []
     tempb = []
     for i in model.named_parameters():

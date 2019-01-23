@@ -98,7 +98,7 @@ class McDataset(Dataset):
     def transform_val(self, sample):
 
         composed_transforms = transforms.Compose([
-            tr.FixScaleCrop(crop_size=self.args.test_size),
+            tr.FixedResize_new(crop_size=self.args.test_size),
             tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std),
             tr.ToTensor()])
 

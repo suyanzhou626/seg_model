@@ -1,5 +1,6 @@
 import argparse
 import nart_tools.pytorch as pytorch
+import nart_tools
 import os
 import torch
 from modeling import network_map
@@ -8,6 +9,7 @@ from collections import OrderedDict
 class ToCaffe(object):
     def __init__(self, args):
         self.args = args
+        self.args.out_name = os.path.join(self.args.save_dir,'model')
         self.args.batchnorm_function = torch.nn.BatchNorm2d
         # Define Dataloader
         self.nclass = self.args.num_classes
@@ -33,6 +35,7 @@ class ToCaffe(object):
                 .format(self.args.resume, checkpoint['epoch']))
 
     def convert(self):
+        nart_tools.update_interp=True
         with pytorch.convert_mode():
             pytorch.convert(self.model,[self.args.input_shape],self.args.out_name,input_names=["data"],output_names=["out"])
 
@@ -45,7 +48,7 @@ def main():
     parser.add_argument('--input_shape', type=int, nargs='*',default=(3,225,225),
                         help='input image size')
 
-    parser.add_argument('--out_name',type=str,default=None,help='path to save model')
+    parser.add_argument('--save_dir',type=str,default=None,help='path to save model')
 
     # checking point
     parser.add_argument('--resume', type=str, default=None,
