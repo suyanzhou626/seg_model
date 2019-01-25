@@ -269,6 +269,6 @@ if __name__ == "__main__":
         num1 += 1
     print(num,num1)
     model.eval()
-    input = torch.rand(1, 3, 513,513)
+    input = torch.rand(1, 3, 64,64)
     output1= model(input)
     print(output1.size())
