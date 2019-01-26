@@ -216,15 +216,19 @@ class Trainer(object):
             print('\nValidation')
             start_time = time.time()
         for i, sample in enumerate(self.val_loader):
-            image, target = sample['image'], sample['label']
+            image, target,ow,oh = sample['image'], sample['label'],sample['ow'], sample['oh']
             if self.args.cuda:
                 image, target = image.cuda(), target.cuda()
             with torch.no_grad():
                 if self.args.backbone == 'dbl':
                     output1,output = self.model(image)
+                    output = output[:,:,0:oh[0].item(),0:ow[0].item()]
+                    output = torch.nn.functional.interpolate(output,size=target.size()[1:],mode='bilinear',align_corners=False)
                     loss = self.criterion(output1,target) + self.criterion(output,target)
                 else:
                     output = self.model(image)
+                    output = output[:,:,0:oh[0].item(),0:ow[0].item()]
+                    output = torch.nn.functional.interpolate(output,size=target.size()[1:],mode='bilinear',align_corners=False)
                     loss = self.criterion(output, target)
             loss = loss/self.args.world_size
             link.allreduce(loss)

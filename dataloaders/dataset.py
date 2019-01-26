@@ -82,14 +82,24 @@ class GenDataset(Dataset):
 
         return composed_transforms(sample)
 
-    def transform_val(self, sample):
+    # def transform_val(self, sample):
 
+    #     composed_transforms = transforms.Compose([
+    #         tr.FixedResize_new(crop_size=self.args.test_size),
+    #         tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std),
+    #         tr.ToTensor()])
+
+    #     return composed_transforms(sample)
+
+    def transform_val(self, sample):
+        pre_trans = tr.Resize(self.args.test_size)
+        temp = pre_trans(sample)
         composed_transforms = transforms.Compose([
-            tr.FixedResize_new(crop_size=self.args.test_size),
             tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std),
             tr.ToTensor()])
+        res = composed_transforms({'image':temp['image'],'label':temp['label']})
 
-        return composed_transforms(sample)
+        return {'image':res['image'],'label':res['label'],'ow':temp['ow'],'oh':temp['oh']}
 
     def transform_vis(self,sample):
         composed_transforms = transforms.Compose([

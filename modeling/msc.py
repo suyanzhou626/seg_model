@@ -145,8 +145,8 @@ class DeconvPath(nn.Module):
     def forward(self,x,ori_input):
         for i,module in enumerate(self.block):
             x = module(x)
-            x = nn.functional.interpolate(x,scale_factor=2,mode='bilinear',align_corners=True)
-        x = nn.functional.interpolate(x,size=ori_input.size()[2:],mode='bilinear',align_corners=True)
+            x = nn.functional.interpolate(x,scale_factor=2,mode='bilinear',align_corners=False)
+        x = nn.functional.interpolate(x,size=ori_input.size()[2:],mode='bilinear',align_corners=False)
         x = nn.functional.softmax(x,dim=1)
         return x
 
@@ -179,10 +179,10 @@ class MSC(nn.Module):
         feat_16 = self.branch3(feat_16)
         feat_8 = self.branch2(feat_8)
         feat_4 = self.branch1(feat_4)
-        x_temp = nn.functional.interpolate(x,input.size()[2:],mode='bilinear',align_corners=True)
-        feat16_temp = nn.functional.interpolate(feat_16,input.size()[2:],mode='bilinear',align_corners=True)
-        feat8_temp = nn.functional.interpolate(feat_8,input.size()[2:],mode='bilinear',align_corners=True)
-        feat4_temp = nn.functional.interpolate(feat_4,input.size()[2:],mode='bilinear',align_corners=True)
+        x_temp = nn.functional.interpolate(x,input.size()[2:],mode='bilinear',align_corners=False)
+        feat16_temp = nn.functional.interpolate(feat_16,input.size()[2:],mode='bilinear',align_corners=False)
+        feat8_temp = nn.functional.interpolate(feat_8,input.size()[2:],mode='bilinear',align_corners=False)
+        feat4_temp = nn.functional.interpolate(feat_4,input.size()[2:],mode='bilinear',align_corners=False)
         select = self.select_conv(torch.cat([x_temp,feat16_temp,feat8_temp,feat4_temp],1))
         select = nn.functional.softmax(select,dim=1)
         select = torch.unsqueeze(select,dim=4)

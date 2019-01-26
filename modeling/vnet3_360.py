@@ -93,7 +93,7 @@ class Vnet3_360(nn.Module):
         x = self.deconvbblock3(x,branch2)
         x = self.deconvbblock4(x,branch1)
         x = self.last_conv(x)
-        x = torch.nn.functional.interpolate(x,size=input.size()[2:],mode='bilinear',align_corners=True)
+        x = torch.nn.functional.interpolate(x,size=input.size()[2:],mode='bilinear',align_corners=False)
         return x
 
     def get_conv_weight_params(self):

@@ -150,7 +150,7 @@ class Valuator(object):
                 else:
                     output = self.model(image)
             output = output[:,:,0:oh[0].item(),0:ow[0].item()]
-            output = torch.nn.functional.interpolate(output,size=ori.size()[1:3],mode='bilinear',align_corners=True)
+            output = torch.nn.functional.interpolate(output,size=ori.size()[1:3],mode='bilinear',align_corners=False)
             pred = output.data.cpu().numpy()
             ori = ori.cpu().numpy()
             pred = np.argmax(pred, axis=1)
