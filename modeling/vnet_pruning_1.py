@@ -30,7 +30,7 @@ class DeconvBlock(nn.Module):
             blocks.append(conv_bn_relu(planes[i],planes[i+1],k_sizes[i],stride=self.strides[i],pad=self.pads[i],dilation=self.dilations[i]))
         self.block = nn.Sequential(*blocks)
     def forward(self,input1,input2):
-        input1 = torch.nn.functional.interpolate(input1,size=input2.size()[2:],mode='bilinear')
+        input1 = torch.nn.functional.interpolate(input1,size=input2.size()[2:],mode='bilinear',align_corners=True)
         input = torch.cat([input1,input2],dim=1)
         input = self.block(input)
         return input
@@ -93,7 +93,7 @@ class VnetPrun1(nn.Module):
         x = self.deconvbblock3(x,branch2)
         x = self.deconvbblock4(x,branch1)
         x = self.last_conv(x)
-        x = torch.nn.functional.interpolate(x,size=input.size()[2:],mode='bilinear',align_corners=False)
+        x = torch.nn.functional.interpolate(x,size=input.size()[2:],mode='bilinear',align_corners=True)
         return x
 
     def get_conv_weight_params(self):

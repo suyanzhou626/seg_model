@@ -142,7 +142,7 @@ class Valuator(object):
                 else:
                     output = self.model(image)
             output = output[:,:,0:oh[0].item(),0:ow[0].item()]
-            output = torch.nn.functional.interpolate(output,size=target.size()[1:],mode='bilinear',align_corners=False)
+            output = torch.nn.functional.interpolate(output,size=target.size()[1:],mode='bilinear',align_corners=True)
             pred = output.data.cpu().numpy()
             target = target.cpu().numpy()
             image = image.cpu().numpy()

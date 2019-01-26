@@ -176,12 +176,12 @@ class Trainer(object):
                 if self.args.backbone == 'dbl':
                     output1,output = self.model(image)
                     output = output[:,:,0:oh[0].item(),0:ow[0].item()]
-                    output = torch.nn.functional.interpolate(output,size=target.size()[1:],mode='bilinear',align_corners=False)
+                    output = torch.nn.functional.interpolate(output,size=target.size()[1:],mode='bilinear',align_corners=True)
                     loss = self.criterion(output1,target) + self.criterion(output,target)
                 else:
                     output = self.model(image)
                     output = output[:,:,0:oh[0].item(),0:ow[0].item()]
-                    output = torch.nn.functional.interpolate(output,size=target.size()[1:],mode='bilinear',align_corners=False)
+                    output = torch.nn.functional.interpolate(output,size=target.size()[1:],mode='bilinear',align_corners=True)
                     loss = self.criterion(output, target)
             test_loss += loss.item()
             pred = output.data.cpu().numpy()

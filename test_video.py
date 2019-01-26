@@ -27,8 +27,9 @@ class Normalize(object):
 
         return img
 class Resize(object):
-    def __init__(self,target_size):
+    def __init__(self,target_size,fill_value=[104.008,116.669,122.675]):
         self.size = target_size[0] if isinstance(target_size,list) else target_size
+        self.value = fill_value
     
     def __call__(self,img):
         w, h = img.size
@@ -38,11 +39,17 @@ class Resize(object):
         else:
             oh = self.size
             ow = int(1.0 * w * oh / h)
+        pad_img_b = np.zeros((self.size,self.size))
+        pad_img_b.fill(self.value[0])
+        pad_img_g = np.zeros((self.size,self.size))
+        pad_img_g.fill(self.value[1])
+        pad_img_r = np.zeros((self.size,self.size))
+        pad_img_r.fill(self.value[2])
+        pad_img = np.stack([pad_img_b,pad_img_g,pad_img_r],axis=-1)
         img = img.resize((ow, oh), Image.BILINEAR)
-        padh = self.size - oh if oh < self.size else 0
-        padw = self.size - ow if ow < self.size else 0
-        img = ImageOps.expand(img, border=(0, 0, padw, padh), fill=0)
-        return {'image': img,
+        img = np.array(img).astype(dtype=np.float32)
+        pad_img[:oh,:ow,:] = img
+        return {'image': pad_img,
                 'ow':ow,'oh':oh}
 class ToTensor(object):
     """Convert ndarrays in sample to Tensors."""
@@ -150,7 +157,7 @@ class Valuator(object):
                 else:
                     output = self.model(image)
             output = output[:,:,0:oh[0].item(),0:ow[0].item()]
-            output = torch.nn.functional.interpolate(output,size=ori.size()[1:3],mode='bilinear',align_corners=False)
+            output = torch.nn.functional.interpolate(output,size=ori.size()[1:3],mode='bilinear',align_corners=True)
             pred = output.data.cpu().numpy()
             ori = ori.cpu().numpy()
             pred = np.argmax(pred, axis=1)

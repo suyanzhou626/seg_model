@@ -31,7 +31,7 @@ class DeconvBlock(nn.Module):
             blocks.append(conv_bn_relu(planes[i],planes[i+1],k_sizes[i],stride=self.strides[i],pad=self.pads[i],dilation=self.dilations[i]))
         self.block = nn.Sequential(*blocks)
     def forward(self,input1,input2):
-        input1 = torch.nn.functional.interpolate(input1,size=input2.size()[2:],mode='bilinear',align_corners=False)
+        input1 = torch.nn.functional.interpolate(input1,size=input2.size()[2:],mode='bilinear',align_corners=True)
         input = torch.cat([input1,input2],dim=1)
         input = self.block(input)
         return input
@@ -89,14 +89,14 @@ class Dbl(nn.Module):
         x = self.block5(x)
         x = self.fc_block(x)
         x = self.fcblock_nconv(x)
-        x = torch.nn.functional.interpolate(x,size=branch.size()[2:],mode='bilinear',align_corners=False)
+        x = torch.nn.functional.interpolate(x,size=branch.size()[2:],mode='bilinear',align_corners=True)
         x = torch.cat([x,branch],dim=1)
         fc_conv_1 = self.fc_conv(x)
-        out1 = torch.nn.functional.interpolate(fc_conv_1,size=input.size()[2:],mode='bilinear',align_corners=False)
+        out1 = torch.nn.functional.interpolate(fc_conv_1,size=input.size()[2:],mode='bilinear',align_corners=True)
         x = torch.cat([fc_conv_1,x,block1_1],dim=1)
         x = self.last_block(x)
         x = self.last_conv(x)
-        out2 = torch.nn.functional.interpolate(x,size=input.size()[2:],mode='bilinear',align_corners=False)
+        out2 = torch.nn.functional.interpolate(x,size=input.size()[2:],mode='bilinear',align_corners=True)
         return out1,out2
 
     def get_conv_weight_params(self):
