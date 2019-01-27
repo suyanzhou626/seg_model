@@ -68,7 +68,7 @@ class GenDataset(Dataset):
         return _img, _target
 
     def transform_vis(self,sample):
-        pre_trans = tr.Resize(self.args.crop_size)
+        pre_trans = tr.Resize(self.args.crop_size,shrink=self.args.shrink)
         temp = pre_trans(sample)
         composed_transforms = transforms.Compose([
             tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std),
@@ -141,11 +141,10 @@ class Valuator(object):
                     _,output = self.model(image)
                 else:
                     output = self.model(image)
-            output = output[:,:,0:oh[0].item(),0:ow[0].item()]
             output = torch.nn.functional.interpolate(output,size=target.size()[1:],mode='bilinear',align_corners=True)
             pred = output.data.cpu().numpy()
             target = target.cpu().numpy()
-            image = image.cpu().numpy()
+            # image = image.cpu().numpy()
             ori = ori.cpu().numpy()
             pred = np.argmax(pred, axis=1)
             if num_img_tr > 100:
@@ -224,6 +223,7 @@ def main():
     parser.add_argument('--num_classes',type=int,default=None,help='the number of classes')
     parser.add_argument('--crop_size', type=int, default=None,
                         help='crop image size')
+    parser.add_argument('--shrink',type=int,default=None)
     # training hyper params
 
     parser.add_argument('--batch_size', type=int, default=None,

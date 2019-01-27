@@ -222,12 +222,10 @@ class Trainer(object):
             with torch.no_grad():
                 if self.args.backbone == 'dbl':
                     output1,output = self.model(image)
-                    output = output[:,:,0:oh[0].item(),0:ow[0].item()]
                     output = torch.nn.functional.interpolate(output,size=target.size()[1:],mode='bilinear',align_corners=True)
                     loss = self.criterion(output1,target) + self.criterion(output,target)
                 else:
                     output = self.model(image)
-                    output = output[:,:,0:oh[0].item(),0:ow[0].item()]
                     output = torch.nn.functional.interpolate(output,size=target.size()[1:],mode='bilinear',align_corners=True)
                     loss = self.criterion(output, target)
             loss = loss/self.args.world_size
@@ -297,6 +295,7 @@ def main():
     parser.add_argument('--val_list',type=str,default=None,help='path to val.txt')
     parser.add_argument('--crop_size', type=int, default=None,
                         help='crop image size')
+    parser.add_argument('--shrink',type=int,default=None)
     parser.add_argument('--test_size',type=int,default=None)
     parser.add_argument('--normal_mean',type=float, nargs='*',default=[104.008,116.669,122.675])
     parser.add_argument('--normal_std',type=float,default=1.0)

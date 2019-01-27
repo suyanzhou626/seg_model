@@ -96,7 +96,7 @@ class McDataset(Dataset):
         return composed_transforms(sample)
 
     def transform_val(self, sample):
-        pre_trans = tr.Resize(self.args.test_size)
+        pre_trans = tr.Resize(self.args.test_size,shrink=self.args.shrink)
         temp = pre_trans(sample)
         composed_transforms = transforms.Compose([
             tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std),

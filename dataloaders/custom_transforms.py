@@ -104,36 +104,53 @@ class RandomRotate(object):
 #                 'label': mask,
 #                 'ow':ow,'oh':oh}
 
+# class Resize(object):
+#     def __init__(self,target_size,fill_value=[104.008,116.669,122.675]):
+#         self.size = target_size[0] if isinstance(target_size,list) else target_size
+#         self.value = fill_value
+    
+#     def __call__(self,sample):
+#         img = sample['image']
+#         mask = sample['label']
+#         w, h = img.size
+#         if h < w:
+#             ow = self.size
+#             oh = int(1.0 * h * ow / w)
+#         else:
+#             oh = self.size
+#             ow = int(1.0 * w * oh / h)
+#         pad_img_b = np.zeros((self.size,self.size))
+#         pad_img_b.fill(self.value[0])
+#         pad_img_g = np.zeros((self.size,self.size))
+#         pad_img_g.fill(self.value[1])
+#         pad_img_r = np.zeros((self.size,self.size))
+#         pad_img_r.fill(self.value[2])
+#         pad_img = np.stack([pad_img_b,pad_img_g,pad_img_r],axis=-1)
+#         img = img.resize((ow, oh), Image.BILINEAR)
+#         img = np.array(img).astype(dtype=np.float32)
+#         pad_img[:oh,:ow,:] = img
+#         return {'image': pad_img,
+#                 'label': mask,
+#                 'ow':ow,'oh':oh}
+
 class Resize(object):
-    def __init__(self,target_size,fill_value=[104.008,116.669,122.675]):
+    def __init__(self,target_size,shrink=16):
         self.size = target_size[0] if isinstance(target_size,list) else target_size
-        self.value = fill_value
+        self.shrink = shrink
     
     def __call__(self,sample):
         img = sample['image']
         mask = sample['label']
         w, h = img.size
-        if h < w:
-            ow = self.size
-            oh = int(1.0 * h * ow / w)
-        else:
-            oh = self.size
-            ow = int(1.0 * w * oh / h)
-        pad_img_b = np.zeros((self.size,self.size))
-        pad_img_b.fill(self.value[0])
-        pad_img_g = np.zeros((self.size,self.size))
-        pad_img_g.fill(self.value[1])
-        pad_img_r = np.zeros((self.size,self.size))
-        pad_img_r.fill(self.value[2])
-        pad_img = np.stack([pad_img_b,pad_img_g,pad_img_r],axis=-1)
-        img = img.resize((ow, oh), Image.BILINEAR)
-        img = np.array(img).astype(dtype=np.float32)
-        pad_img[:oh,:ow,:] = img
-        return {'image': pad_img,
+        scale = min(self.size/float(w),self.size/float(h))
+        out_w = int(w*scale)
+        out_h = int(h*scale)
+        out_w = ((out_w - 1 + self.shrink -1) // self.shrink) * self.shrink +1
+        out_h = ((out_h - 1 + self.shrink -1) // self.shrink) * self.shrink +1
+        img = img.resize((out_w,out_h),Image.BILINEAR)
+        return {'image': img,
                 'label': mask,
-                'ow':ow,'oh':oh}
-
-
+                'ow':w,'oh':h}
 
 class RandomGaussianBlur(object):
     def __call__(self, sample):
