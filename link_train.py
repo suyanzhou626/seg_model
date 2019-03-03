@@ -159,6 +159,8 @@ class Trainer(object):
             self.optimizer.step()
             link.allreduce(loss)
             train_loss += loss.item()
+            if isinstance(output,tuple):
+                output = output[0]
             pred = output.data.cpu().numpy()
             target_array = target.cpu().numpy()
             pred = np.argmax(pred, axis=1)
@@ -224,6 +226,10 @@ class Trainer(object):
                     output1,output = self.model(image)
                     output = torch.nn.functional.interpolate(output,size=target.size()[1:],mode='bilinear',align_corners=True)
                     loss = self.criterion(output1,target) + self.criterion(output,target)
+                elif self.args.backbone == 'msc':
+                    output = self.model(image)
+                    output[0] = torch.nn.functional.interpolate(output[0],size=target.size()[1:],mode='bilinear',align_corners=True)
+                    loss = self.criterion(output,target)
                 else:
                     output = self.model(image)
                     output = torch.nn.functional.interpolate(output,size=target.size()[1:],mode='bilinear',align_corners=True)
@@ -231,6 +237,8 @@ class Trainer(object):
             loss = loss/self.args.world_size
             link.allreduce(loss)
             test_loss += loss.item()
+            if isinstance(output,tuple):
+                output = output[0]
             pred = output.data.cpu().numpy()
             target = target.cpu().numpy()
             pred = np.argmax(pred, axis=1)

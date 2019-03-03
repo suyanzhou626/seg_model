@@ -167,18 +167,28 @@ class Valuator(object):
             pred = output.data.cpu().numpy()
             ori = ori.cpu().numpy()
             pred = np.argmax(pred, axis=1)
-            pred = np.ones(pred.shape) - pred
+            # pred = np.ones(pred.shape) - pred
             label = decode_seg_map_sequence(pred).cpu().numpy().transpose([0,2,3,1])
             label = label[:,:,:,::-1] # convert to BGR
             pred = np.stack([pred,pred,pred],axis=3)
-            ori[pred==1] = 0
-            label[pred==0] = 0
-            temp = ori + label
+            ori = ori.astype(dtype=np.uint8)
+            label = label.astype(dtype=np.uint8)
+            # ori *= pred.astype(dtype=np.uint8)
+            # label[pred==0] = 0
+            temp = self.addImage(ori,label)
+            temp[pred == 0] = 0
             temp = temp.astype(np.uint8)
             cv2.imwrite(os.path.join(save_name,str(i)+'.jpg'),temp[0])
             videoWriter.write(temp[0])
         print('write %d frame' % (i+1))
         videoWriter.release()
+
+    def addImage(self,img1_path,img2_path):
+        alpha = 1
+        beta = 0.7
+        gamma = 0
+        img_add = cv2.addWeighted(img1_path,alpha,img2_path,beta,gamma)
+        return img_add
 
 def main():
     parser = argparse.ArgumentParser(description="PyTorch vnet Training")

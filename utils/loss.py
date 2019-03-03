@@ -1,6 +1,18 @@
 import torch
 import torch.nn as nn
 
+def get_batch_label_vector(target, nclass):
+        # target is a 3D Variable BxHxW, output is 2D BxnClass
+        batch = target.size(0)
+        tvect = torch.Tensor(torch.zeros(batch, nclass))
+        for i in range(batch):
+            hist = torch.histc(target[i].cpu().data.float(), 
+                               bins=nclass, min=0,
+                               max=nclass-1)
+            vect = hist>0
+            tvect[i] = vect
+        return tvect
+
 class SegmentationLosses(object):
     def __init__(self, weight=None, size_average=True, batch_average=True, ignore_index=255, cuda=False):
         self.ignore_index = ignore_index
@@ -19,13 +31,40 @@ class SegmentationLosses(object):
             raise NotImplementedError
 
     def CrossEntropyLoss(self, logit, target):
-        n, c,h,w = logit.size()
         criterion = nn.CrossEntropyLoss(weight=self.weight, ignore_index=self.ignore_index,
-                                        reduction='elementwise_mean' if self.size_average else 'sum')
+                                            reduction='elementwise_mean' if self.size_average else 'sum')
         if self.cuda:
             criterion = criterion.cuda()
-
-        loss = criterion(logit, target.long())
+        if not isinstance(logit,tuple):
+            # n, c,h,w = logit.size()
+            loss = criterion(logit, target.long())
+        elif len(logit) == 2:
+            pred1,pred2 = tuple(logit)
+            target2 = torch.clone(target)
+            target2[target2>1] = 1
+            loss1 = criterion(pred1,target)
+            loss2 = criterion(pred2,target2)
+            loss = loss1 + loss2
+        elif len(logit) == 3:
+            semantic_pred,se_pred,fore_pred = tuple(logit)
+            # print(semantic_pred,semantic_pred.size())
+            # print(fore_pred,fore_pred.size())
+            # print(se_pred,se_pred.size())
+            n_classes = semantic_pred.size()[1]
+            target2 = torch.clone(target)
+            target2 = torch.unsqueeze(target2,1).float()
+            target2 = nn.functional.interpolate(target2,size=fore_pred.data.size()[2:],mode='bilinear',align_corners=True)
+            target2 = torch.squeeze(target2,1).long()
+            target2[target2>1] = 1
+            se_target = get_batch_label_vector(target,n_classes).type_as(se_pred)
+            target = target.long()
+            # print(target,target.size())
+            # print(target2,target2.size())
+            # print(se_target,se_target.size())
+            loss1 = criterion(semantic_pred,target)
+            loss2 = criterion(fore_pred,target2)
+            se_loss = nn.BCELoss(self.weight,reduction='elementwise_mean' if self.size_average else 'sum')(torch.sigmoid(se_pred),se_target)
+            loss = loss1 + loss2 + se_loss
 
         # if self.batch_average:
         #     loss /= n
@@ -53,9 +92,13 @@ class SegmentationLosses(object):
 if __name__ == "__main__":
     loss = SegmentationLosses(cuda=True)
     a = torch.rand(1, 3,2,2).cuda()
+    c = torch.rand(1, 2,2,2).cuda()
+    d = torch.rand(1,3).cuda()
+    pred = (a,d,c)
     b = torch.argmax(a,dim=1)
-    print(b)
-    print(loss.CrossEntropyLoss(a, b).item())
+    print(a.type())
+    print(b.type())
+    print(loss.CrossEntropyLoss(pred, b).item())
     print(loss.FocalLoss(a, b, gamma=0, alpha=None).item())
     print(loss.FocalLoss(a, b, gamma=2, alpha=0.5).item())
 
