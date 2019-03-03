@@ -197,7 +197,7 @@ class MSC(nn.Module):
         z *= temp_y
         z = F.interpolate(z,size=input.data.size()[2:],mode='bilinear',align_corners=True)
 
-        return (z,y,x)
+        return [z,y,x]
 
     def get_conv_weight_params(self):
         for m in self.named_modules():

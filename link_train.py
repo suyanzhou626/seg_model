@@ -159,7 +159,7 @@ class Trainer(object):
             self.optimizer.step()
             link.allreduce(loss)
             train_loss += loss.item()
-            if isinstance(output,tuple):
+            if isinstance(output,list):
                 output = output[0]
             pred = output.data.cpu().numpy()
             target_array = target.cpu().numpy()
@@ -237,7 +237,7 @@ class Trainer(object):
             loss = loss/self.args.world_size
             link.allreduce(loss)
             test_loss += loss.item()
-            if isinstance(output,tuple):
+            if isinstance(output,list):
                 output = output[0]
             pred = output.data.cpu().numpy()
             target = target.cpu().numpy()

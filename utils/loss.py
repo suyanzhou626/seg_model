@@ -35,7 +35,7 @@ class SegmentationLosses(object):
                                             reduction='elementwise_mean' if self.size_average else 'sum')
         if self.cuda:
             criterion = criterion.cuda()
-        if not isinstance(logit,tuple):
+        if not isinstance(logit,list):
             # n, c,h,w = logit.size()
             loss = criterion(logit, target.long())
         elif len(logit) == 2:
@@ -94,7 +94,7 @@ if __name__ == "__main__":
     a = torch.rand(1, 3,2,2).cuda()
     c = torch.rand(1, 2,2,2).cuda()
     d = torch.rand(1,3).cuda()
-    pred = (a,d,c)
+    pred = [a,d,c]
     b = torch.argmax(a,dim=1)
     print(a.type())
     print(b.type())
