@@ -119,14 +119,11 @@ class ResNet(nn.Module):
         x = self.relu(x)
         x = self.maxpool(x)
 
-        x = self.layer1(x)
-        # feature_4x = x
-        x = self.layer2(x)
-        # feature_8x = x
-        x = self.layer3(x)
-        # feature_8x = x
-        x = self.layer4(x)
-        return x
+        c1 = self.layer1(x)
+        c2 = self.layer2(c1)
+        c3 = self.layer3(c2)
+        c4 = self.layer4(c3)
+        return c1,c2,c3,c4
 
     def _load_pretrained_model(self):
         pretrain_dict = model_zoo.load_url('https://download.pytorch.org/models/resnet101-5d3b4d8f.pth')
@@ -139,7 +136,11 @@ class ResNet(nn.Module):
         self.load_state_dict(state_dict)
 
 def conv_bn_relu(inplane,outplane,k_size,stride=1,dilation=1):
-    block = nn.Sequential(OrderedDict([('conv',SeparableConv2d(inplane,outplane,k_size,stride=stride,dilation=dilation)),
+    if k_size == 1:
+        block = nn.Sequential(OrderedDict([('conv',nn.Conv2d(inplane,outplane,1)),
+    ('bn',BN(outplane)),('prelu',nn.PReLU(outplane))]))
+    else:
+        block = nn.Sequential(OrderedDict([('conv',SeparableConv2d(inplane,outplane,k_size,stride=stride,dilation=dilation)),
     ('bn',BN(outplane)),('prelu',nn.PReLU(outplane))]))
     return block
 
@@ -156,8 +157,11 @@ class MSC(nn.Module):
         self.classifierlayer1 = nn.Linear(2048,512)
         self.classifierlayer2 = nn.Linear(512,args.num_classes)
 
-        self.semanticlayer1 = conv_bn_relu(2048,512,3)
-        self.semanticlayer2 = conv_bn_relu(512,64,3)
+        self.reduce_layer1 = conv_bn_relu(2048,1024,1)
+        self.semanticlayer1 = conv_bn_relu(2048,256,3)
+        self.reduce_layer2 = conv_bn_relu(512,256,1)
+        self.semanticlayer2 = conv_bn_relu(512,32,3)
+        self.reduce_layer3 = conv_bn_relu(256,32,1)
         self.semanticlayer3 = conv_bn_relu(64,args.num_classes,1)
         # self.deconvblock = DeconvPath(**self.deconv_parameter[0])
         
@@ -170,34 +174,47 @@ class MSC(nn.Module):
             elif classname.find('Linear')!= -1:
                 nn.init.kaiming_normal_(m.weight)
                 m.bias.data.zero_()
-        self.encoder._load_pretrained_model()
+
+        if args.ft:
+            self.encoder._load_pretrained_model()
     def forward(self,input):
-        x = self.encoder(input)
-        y = x.detach()
-        x = self.foregroundlayer1(x)
-        x = self.foregroundlayer2(x)
-        out_two = torch.argmax(x,dim=1,keepdim=True)
-        out_two = out_two.type_as(y)
-        temp = y * out_two
-        z = temp.detach()
-        y = self.adaptiveavgpool(y)
+        feat = self.encoder(input)
+        fore_x = self.foregroundlayer1(feat[-1])
+        fore_x = self.foregroundlayer2(fore_x)
+        out_two = torch.argmax(fore_x,dim=1,keepdim=True)
+        out_two = out_two.type_as(feat[-1])
+
+        y = self.adaptiveavgpool(feat[-1])
         y = y.view(y.size(0),-1)
         y = self.classifierlayer1(y)
         y = self.classifierlayer2(y)
-        temp_y = y.detach()
-        temp_y = torch.unsqueeze(temp_y,2)
+
+        temp_y = torch.unsqueeze(y,2)
         temp_y = torch.unsqueeze(temp_y,3)
         temp_y = torch.sigmoid(temp_y)
-        z = F.interpolate(z,scale_factor=2,mode='bilinear',align_corners=True)
+        z = feat[-1] * out_two
+        # z = F.interpolate(z,scale_factor=2,mode='bilinear',align_corners=True)
+        # out_two = F.interpolate(out_two,scale_factor=2,mode='bilinear',align_corners=True)
+        z = self.reduce_layer1(z)
+        temp_z = feat[2] * out_two
+        z = torch.cat([z,temp_z],dim=1)
         z = self.semanticlayer1(z)
-        z = F.interpolate(z,scale_factor=2,mode='bilinear',align_corners=True)
+        z = F.interpolate(z,size=feat[1].data.size()[2:],mode='bilinear',align_corners=True)
+        out_two = F.interpolate(out_two,size=feat[1].data.size()[2:],mode='bilinear',align_corners=True)
+        temp_z = self.reduce_layer2(feat[1])
+        temp_z = temp_z * out_two
+        z = torch.cat([z,temp_z],dim=1)
         z = self.semanticlayer2(z)
-        z = F.interpolate(z,scale_factor=2,mode='bilinear',align_corners=True)
+        z = F.interpolate(z,size=feat[0].data.size()[2:],mode='bilinear',align_corners=True)
+        out_two = F.interpolate(out_two,size=feat[0].data.size()[2:],mode='bilinear',align_corners=True)
+        temp_z = self.reduce_layer3(feat[0])
+        temp_z = temp_z * out_two
+        z = torch.cat([z,temp_z],dim=1)
         z = self.semanticlayer3(z)
         z *= temp_y
-        z = F.interpolate(z,size=input.data.size()[2:],mode='bilinear',align_corners=True)
+        # z = F.interpolate(z,size=input.data.size()[2:],mode='bilinear',align_corners=True)
 
-        return [z,y,x]
+        return [z,y,fore_x]
 
     def get_conv_weight_params(self):
         for m in self.named_modules():
@@ -232,6 +249,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     args = parser.parse_args()
     args.num_classes = 4
+    args.ft = False
     def BNFunc(*args, **kwargs):
         return nn.BatchNorm2d(*args,**kwargs)
     args.batchnorm_function = BNFunc

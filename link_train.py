@@ -145,22 +145,14 @@ class Trainer(object):
                 image, target = image.cuda(), target.cuda()
             current_lr = self.scheduler(self.optimizer, i, epoch, self.best_pred)
             self.optimizer.zero_grad()
-            if self.args.backbone == 'dbl':
-                output1,output = self.model(image)
-                loss1 = self.criterion(output1, target)
-                loss2 = self.criterion(output, target)
-                loss = loss1+loss2
-            else:
-                output = self.model(image)
-                loss = self.criterion(output,target)
+            output = self.model(image)
+            loss,output = self.criterion(output,target)
             loss = loss/self.args.world_size
             loss.backward()
             reduce_gradients(self.model,sync=False)
             self.optimizer.step()
             link.allreduce(loss)
             train_loss += loss.item()
-            if isinstance(output,list):
-                output = output[0]
             pred = output.data.cpu().numpy()
             target_array = target.cpu().numpy()
             pred = np.argmax(pred, axis=1)
@@ -222,23 +214,11 @@ class Trainer(object):
             if self.args.cuda:
                 image, target = image.cuda(), target.cuda()
             with torch.no_grad():
-                if self.args.backbone == 'dbl':
-                    output1,output = self.model(image)
-                    output = torch.nn.functional.interpolate(output,size=target.size()[1:],mode='bilinear',align_corners=True)
-                    loss = self.criterion(output1,target) + self.criterion(output,target)
-                elif self.args.backbone == 'msc':
-                    output = self.model(image)
-                    output[0] = torch.nn.functional.interpolate(output[0],size=target.size()[1:],mode='bilinear',align_corners=True)
-                    loss = self.criterion(output,target)
-                else:
-                    output = self.model(image)
-                    output = torch.nn.functional.interpolate(output,size=target.size()[1:],mode='bilinear',align_corners=True)
-                    loss = self.criterion(output, target)
+                output = self.model(image)
+                loss,output = self.criterion(output, target)
             loss = loss/self.args.world_size
             link.allreduce(loss)
             test_loss += loss.item()
-            if isinstance(output,list):
-                output = output[0]
             pred = output.data.cpu().numpy()
             target = target.cpu().numpy()
             pred = np.argmax(pred, axis=1)

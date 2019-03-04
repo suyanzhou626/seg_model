@@ -20,6 +20,8 @@ class SegmentationLosses(object):
         self.size_average = size_average
         self.batch_average = batch_average
         self.cuda = cuda
+        self.loss_weight1 = 1
+        self.loss_weight2 = 1
 
     def build_loss(self, mode='ce'):
         """Choices: ['ce' or 'focal']"""
@@ -37,16 +39,24 @@ class SegmentationLosses(object):
             criterion = criterion.cuda()
         if not isinstance(logit,list):
             # n, c,h,w = logit.size()
+            logit = nn.functional.interpolate(logit,size=target.data.size()[1:],mode='bilinear',align_corners=True)
             loss = criterion(logit, target.long())
+            return loss,logit
         elif len(logit) == 2:
             pred1,pred2 = tuple(logit)
+            pred1 = nn.functional.interpolate(pred1,size=target.data.size()[1:],mode='bilinear',align_corners=True)
             target2 = torch.clone(target)
+            target2 = torch.unsqueeze(target2,1).float()
+            target2 = nn.functional.interpolate(target2,size=pred2.data.size()[2:],mode='bilinear',align_corners=True)
+            target2 = torch.squeeze(target2,1).long()
             target2[target2>1] = 1
             loss1 = criterion(pred1,target)
             loss2 = criterion(pred2,target2)
-            loss = loss1 + loss2
+            loss = loss1 + self.loss_weight1*loss2
+            return loss,pred1
         elif len(logit) == 3:
             semantic_pred,se_pred,fore_pred = tuple(logit)
+            semantic_pred = nn.functional.interpolate(semantic_pred,size=target.data.size()[1:],mode='bilinear',align_corners=True)
             # print(semantic_pred,semantic_pred.size())
             # print(fore_pred,fore_pred.size())
             # print(se_pred,se_pred.size())
@@ -64,12 +74,10 @@ class SegmentationLosses(object):
             loss1 = criterion(semantic_pred,target)
             loss2 = criterion(fore_pred,target2)
             se_loss = nn.BCELoss(self.weight,reduction='elementwise_mean' if self.size_average else 'sum')(torch.sigmoid(se_pred),se_target)
-            loss = loss1 + loss2 + se_loss
-
+            loss = loss1 + self.loss_weight1*loss2 + self.loss_weight2*se_loss
+            return loss,semantic_pred
         # if self.batch_average:
         #     loss /= n
-
-        return loss
 
     def FocalLoss(self, logit, target, gamma=2, alpha=0.5):
         n, c,h,w = logit.size()
