@@ -91,7 +91,7 @@ class Trainer(object):
 
         # Define Criterion
         # whether to use class balanced weights
-        self.criterion = SegmentationLosses(weight=weight, cuda=self.args.cuda).build_loss(mode=self.args.loss_type)
+        self.criterion = SegmentationLosses(weight=weight, cuda=self.args.cuda,foreloss_weight=args.foreloss_weight,seloss_weight=args.seloss_weight).build_loss(mode=self.args.loss_type)
         self.model, self.optimizer = model, optimizer
         
         # Define Evaluator
@@ -295,6 +295,8 @@ def main():
     parser.add_argument('--loss_type', type=str, default='ce',
                         choices=['ce', 'focal'],
                         help='loss func type (default: ce)')
+    parser.add_argument('--foreloss_weight',type=float,default=1)
+    parser.add_argument('--seloss_weight',type=float,default=1)
     # training hyper params
     parser.add_argument('--display_iter',type=int,default=10)
     parser.add_argument('--epochs', type=int, default=None, metavar='N',

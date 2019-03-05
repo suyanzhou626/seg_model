@@ -161,6 +161,8 @@ class Valuator(object):
             with torch.no_grad():
                 if self.args.backbone == 'dbl':
                     _,output = self.model(image)
+                elif self.args.backbone == 'msc':
+                    output = self.model(image)[0]
                 else:
                     output = self.model(image)
             output = torch.nn.functional.interpolate(output,size=ori.size()[1:3],mode='bilinear',align_corners=True)

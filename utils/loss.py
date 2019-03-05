@@ -14,14 +14,14 @@ def get_batch_label_vector(target, nclass):
         return tvect
 
 class SegmentationLosses(object):
-    def __init__(self, weight=None, size_average=True, batch_average=True, ignore_index=255, cuda=False):
+    def __init__(self, weight=None, size_average=True, batch_average=True, ignore_index=255, cuda=False,foreloss_weight=1,seloss_weight=1):
         self.ignore_index = ignore_index
         self.weight = weight
         self.size_average = size_average
         self.batch_average = batch_average
         self.cuda = cuda
-        self.loss_weight1 = 1
-        self.loss_weight2 = 1
+        self.loss_weight1 = foreloss_weight
+        self.loss_weight2 = seloss_weight
 
     def build_loss(self, mode='ce'):
         """Choices: ['ce' or 'focal']"""
