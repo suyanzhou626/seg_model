@@ -243,6 +243,7 @@ def main():
 
 
     args = parser.parse_args()
+    args.ft = False
     args.network = network_map[args.backbone]
     args.cuda = not args.no_cuda and torch.cuda.is_available()    
     args.gpus = torch.cuda.device_count()

@@ -3,6 +3,7 @@ import os
 import numpy as np
 import torch
 import time
+import gc
 import linklink as link
 from torch.utils.data import DataLoader
 from collections import OrderedDict
@@ -74,10 +75,12 @@ class Trainer(object):
         
         # Define network
         model = self.args.network(self.args)
-
-        train_params = [{'params': model.get_conv_weight_params(), 'lr': self.args.lr,'weight_decay':self.args.weight_decay},
-                        {'params': model.get_conv_bias_params(), 'lr': self.args.lr * 2,'weight_decay':0},
-                        {'params': model.get_bn_prelu_params(),'lr': self.args.lr,'weight_decay':0}]
+        if self.args.ft:
+            train_params = model.parameters()
+        else:
+            train_params = [{'params': model.get_conv_weight_params(), 'lr': self.args.lr,'weight_decay':self.args.weight_decay},
+                            {'params': model.get_conv_bias_params(), 'lr': self.args.lr * 2,'weight_decay':0},
+                            {'params': model.get_bn_prelu_params(),'lr': self.args.lr,'weight_decay':0}]
         # train_params = [{'params':model.parameters(),'lr':self.args.lr}]
 
         # Define Optimizer
@@ -115,13 +118,16 @@ class Trainer(object):
                 else:
                     name = k
                 new_state_dict[name] = v
-            self.model.load_state_dict(new_state_dict)
+            self.model.load_state_dict(new_state_dict,strict=False)
             if not self.args.ft:
                 self.optimizer.load_state_dict(checkpoint['optimizer'])
             self.best_pred = checkpoint['best_pred']
             if rank == 0:
                 print("=> loaded checkpoint '{}' (epoch {})"
                   .format(self.args.resume, checkpoint['epoch']))
+            del checkpoint,new_state_dict,k,v,name
+            gc.collect
+            torch.cuda.empty_cache()
         self.model = DistModule(self.model,sync=False)
 
         # Clear start epoch if fine-tuning
@@ -346,6 +352,10 @@ def main():
     parser.add_argument('--use_link',action='store_true',default=True)
 
     args = parser.parse_args()
+    args.model_backbone = None
+    if 'deeplab' in args.backbone:
+        temp = args.backbone.split('_')
+        args.model_backbone = temp[1]
     args.network = network_map[args.backbone]
     args.cuda = not args.no_cuda and torch.cuda.is_available()    
     args.gpus = torch.cuda.device_count()

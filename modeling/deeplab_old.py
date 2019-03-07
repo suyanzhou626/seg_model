@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from .aspp import build_aspp
-from .decoder import build_decoder
-from .backbone import build_backbone
+from .nn.aspp_old import build_aspp
+from .nn.decoder import build_decoder
+from .nn.xception_old import AlignedXception
 
 class DeepLab(nn.Module):
     def __init__(self, args,backbone='resnet', output_stride=16, freeze_bn=False):
@@ -14,7 +14,7 @@ class DeepLab(nn.Module):
         if backbone == 'drn':
             output_stride = 8
 
-        self.backbone = build_backbone(backbone, output_stride, BatchNorm)
+        self.backbone = AlignedXception(output_stride, BatchNorm)
         self.aspp = build_aspp(backbone, output_stride, BatchNorm)
         self.decoder = build_decoder(num_classes, backbone, BatchNorm)
 

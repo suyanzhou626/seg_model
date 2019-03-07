@@ -36,10 +36,12 @@ class Trainer(object):
 
         # Define network
         model = self.args.network(self.args)
-
-        train_params = [{'params': model.get_conv_weight_params(), 'lr': self.args.lr,'weight_decay':self.args.weight_decay},
-                        {'params': model.get_conv_bias_params(), 'lr': self.args.lr * 2,'weight_decay':0},
-                        {'params': model.get_bn_prelu_params(),'lr': self.args.lr,'weight_decay':0}]
+        if self.args.ft:
+            train_params = model.parameters()
+        else:
+            train_params = [{'params': model.get_conv_weight_params(), 'lr': self.args.lr,'weight_decay':self.args.weight_decay},
+                            {'params': model.get_conv_bias_params(), 'lr': self.args.lr * 2,'weight_decay':0},
+                            {'params': model.get_bn_prelu_params(),'lr': self.args.lr,'weight_decay':0}]
         # train_params = [{'params':model.parameters(),'lr':args.lr}]
 
         # Define Optimizer
@@ -119,14 +121,8 @@ class Trainer(object):
                 image, target = image.cuda(), target.cuda()
             current_lr = self.scheduler(self.optimizer, i, epoch, self.best_pred)
             self.optimizer.zero_grad()
-            if self.args.backbone == 'dbl':
-                output1,output = self.model(image)
-                loss1 = self.criterion(output1, target)
-                loss2 = self.criterion(output, target)
-                loss = loss1+loss2
-            else:
-                output = self.model(image)
-                loss = self.criterion(output,target)
+            output = self.model(image)
+            loss,output = self.criterion(output,target)
             loss.backward()
             self.optimizer.step()
             train_loss += loss.item()
@@ -173,14 +169,8 @@ class Trainer(object):
             if self.args.cuda:
                 image, target = image.cuda(), target.cuda()
             with torch.no_grad():
-                if self.args.backbone == 'dbl':
-                    output1,output = self.model(image)
-                    output = torch.nn.functional.interpolate(output,size=target.size()[1:],mode='bilinear',align_corners=True)
-                    loss = self.criterion(output1,target) + self.criterion(output,target)
-                else:
-                    output = self.model(image)
-                    output = torch.nn.functional.interpolate(output,size=target.size()[1:],mode='bilinear',align_corners=True)
-                    loss = self.criterion(output, target)
+                output = self.model(image)
+                loss,output = self.criterion(output, target)
             test_loss += loss.item()
             pred = output.data.cpu().numpy()
             target = target.cpu().numpy()
