@@ -82,57 +82,6 @@ class RandomRotate(object):
         return {'image': img,
                 'label': mask}
 
-# class Resize(object):
-#     def __init__(self,target_size):
-#         self.size = target_size[0] if isinstance(target_size,list) else target_size
-    
-#     def __call__(self,sample):
-#         img = sample['image']
-#         mask = sample['label']
-#         w, h = img.size
-#         if h < w:
-#             ow = self.size
-#             oh = int(1.0 * h * ow / w)
-#         else:
-#             oh = self.size
-#             ow = int(1.0 * w * oh / h)
-#         img = img.resize((ow, oh), Image.BILINEAR)
-#         padh = self.size - oh if oh < self.size else 0
-#         padw = self.size - ow if ow < self.size else 0
-#         img = ImageOps.expand(img, border=(0, 0, padw, padh), fill=0)
-#         return {'image': img,
-#                 'label': mask,
-#                 'ow':ow,'oh':oh}
-
-# class Resize(object):
-#     def __init__(self,target_size,fill_value=[104.008,116.669,122.675]):
-#         self.size = target_size[0] if isinstance(target_size,list) else target_size
-#         self.value = fill_value
-    
-#     def __call__(self,sample):
-#         img = sample['image']
-#         mask = sample['label']
-#         w, h = img.size
-#         if h < w:
-#             ow = self.size
-#             oh = int(1.0 * h * ow / w)
-#         else:
-#             oh = self.size
-#             ow = int(1.0 * w * oh / h)
-#         pad_img_b = np.zeros((self.size,self.size))
-#         pad_img_b.fill(self.value[0])
-#         pad_img_g = np.zeros((self.size,self.size))
-#         pad_img_g.fill(self.value[1])
-#         pad_img_r = np.zeros((self.size,self.size))
-#         pad_img_r.fill(self.value[2])
-#         pad_img = np.stack([pad_img_b,pad_img_g,pad_img_r],axis=-1)
-#         img = img.resize((ow, oh), Image.BILINEAR)
-#         img = np.array(img).astype(dtype=np.float32)
-#         pad_img[:oh,:ow,:] = img
-#         return {'image': pad_img,
-#                 'label': mask,
-#                 'ow':ow,'oh':oh}
-
 class Resize(object):
     def __init__(self,target_size,shrink=16):
         self.size = target_size[0] if isinstance(target_size,list) else target_size
@@ -268,3 +217,8 @@ class FixedResize_new(object):
         mask = ImageOps.expand(mask,border=(0, 0, padw, padh), fill=0)
         return {'image': img,
                 'label': mask}
+
+def onehot(label, num):
+    m = label
+    one_hot = np.eye(num)[m]
+    return one_hot
