@@ -7,7 +7,7 @@ import cv2
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 from torchvision import transforms
-from modeling import network_map
+from modeling.generatenet import generate_net
 from dataloaders.utils import decode_seg_map_sequence
 from utils.metrics import Evaluator
 from collections import OrderedDict
@@ -94,7 +94,10 @@ class VideoDataset(Dataset):
         print('this video({}) has %d frame(%d)'.format(video_path) % (self.framenum,cnt))
     def __getitem__(self, index):
         _img = self.images[index]
+        if not self.args.bgr_mode:
+            _img = _img[:,:,::-1].copy()
         temp = Image.fromarray(_img,mode='RGB')
+        
         input_image = self.transform_val(temp)
         _img = torch.from_numpy(_img)
         sample = {'input':input_image['image'],'ori':_img,'ow':input_image['ow'],'oh':input_image['oh']}
@@ -118,7 +121,7 @@ class Valuator(object):
         self.args = args
         self.args.batchnorm_function = torch.nn.BatchNorm2d
         # Define network
-        model = self.args.network(self.args)
+        model = generate_net(self.args)
         self.model = model
 
         # Using cuda
@@ -171,7 +174,8 @@ class Valuator(object):
             pred = np.argmax(pred, axis=1)
             # pred = np.ones(pred.shape) - pred
             label = decode_seg_map_sequence(pred).cpu().numpy().transpose([0,2,3,1])
-            label = label[:,:,:,::-1] # convert to BGR
+            if self.args.bgr_mode:
+                label = label[:,:,:,::-1] # convert to BGR
             pred = np.stack([pred,pred,pred],axis=3)
             ori = ori.astype(dtype=np.uint8)
             label = label.astype(dtype=np.uint8)
@@ -180,6 +184,8 @@ class Valuator(object):
             temp = self.addImage(ori,label)
             temp[pred == 0] = 0
             temp = temp.astype(np.uint8)
+            if not self.args.bgr_mode:
+                temp = temp[:,:,:,::-1]
             cv2.imwrite(os.path.join(save_name,str(i)+'.jpg'),temp[0])
             videoWriter.write(temp[0])
         print('write %d frame' % (i+1))
@@ -203,7 +209,7 @@ def main():
     parser.add_argument('--normal_mean',type=float, nargs='*',default=[104.008,116.669,122.675])
     parser.add_argument('--normal_std',type=float,default=1.0)
     # training hyper params
-
+    parser.add_argument('--bgr_mode',action='store_true', default=False,help='input image is bgr but rgb')
     parser.add_argument('--save_dir',type=str,default=None,help='path to save model')
 
     # cuda, seed and logging
@@ -216,8 +222,6 @@ def main():
 
     args = parser.parse_args()
     args.batch_size = 1
-    args.ft = False
-    args.network = network_map[args.backbone]
     args.cuda = not args.no_cuda and torch.cuda.is_available()    
     args.gpus = torch.cuda.device_count()
     print("torch.cuda.device_count()=",args.gpus)

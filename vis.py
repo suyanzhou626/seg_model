@@ -173,7 +173,8 @@ class Valuator(object):
                 name = str(name)
             save_name = os.path.join(save_dir,name+'.png')
             image = images[i,:,:,:]
-            image = image[:,:,::-1].copy() #convert to RGB
+            if self.args.bgr_mode:
+                image = image[:,:,::-1].copy() #convert to RGB
             label_mask = labels[i,:,:,:]
             prediction = predictions[i,:,:,:]
             if image.shape != label_mask.shape:

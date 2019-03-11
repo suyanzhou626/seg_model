@@ -3,7 +3,7 @@ import nart_tools.pytorch as pytorch
 import nart_tools
 import os
 import torch
-from modeling import network_map
+from modeling.generatenet import generate_net
 from collections import OrderedDict
 
 class ToCaffe(object):
@@ -14,7 +14,7 @@ class ToCaffe(object):
         # Define Dataloader
         self.nclass = self.args.num_classes
         # Define network
-        model = self.args.network(self.args)
+        model = generate_net(self.args)
         self.model = model
 
         # Resuming checkpoint
@@ -56,7 +56,6 @@ def main():
 
 
     args = parser.parse_args()
-    args.network = network_map[args.backbone]
 
     # if args.test_batch_size is None:
     #     args.test_batch_size = args.batch_size

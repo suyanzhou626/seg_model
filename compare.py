@@ -6,7 +6,7 @@ import PIL.Image as img
 import cv2
 from torch.utils.data import DataLoader,Dataset
 from dataloaders import custom_transforms as tr
-from modeling import network_map
+from modeling.generatenet import generate_net
 from torchvision import transforms
 from modeling.sync_batchnorm.replicate import patch_replication_callback
 from dataloaders.utils import decode_seg_map_sequence
@@ -42,10 +42,7 @@ class GenDataset(Dataset):
             self.paths.append(line)
         print('all images have: %d, discard %d' % (temp_all,temp_discard))
         assert (len(self.images) == len(self.categories))
-        if not 'rank' in args:
-            print('Number of images in {}: {:d}'.format(self._data_list.split('/')[-1], len(self.images)))
-        elif args.rank == 0:
-            print('Number of images in {}: {:d}'.format(self._data_list.split('/')[-1], len(self.images)))
+        print('Number of images in {}: {:d}'.format(self._data_list.split('/')[-1], len(self.images)))
 
     def __getitem__(self, index):
         _img, _target = self._make_img_gt_point_pair(index)
@@ -59,8 +56,9 @@ class GenDataset(Dataset):
 
     def _make_img_gt_point_pair(self, index):
         _img = img.open(self.images[index]).convert('RGB')
-        temp = np.array(_img)[:,:,::-1].copy()  #convert to BGR
-        _img = img.fromarray(temp.astype(dtype=np.uint8),mode='RGB')
+        _img = np.array(_img).astype(dtype=np.float32)
+        if self.args.bgr_mode:
+            _img = np.array(_img)[:,:,::-1].copy()  #convert to BGR
         _target = img.open(self.categories[index])
         if (_target.mode != 'L' and _target.mode != 'P'):
             temp = np.unique(np.array(_target))
@@ -68,17 +66,16 @@ class GenDataset(Dataset):
                 _target = _target.convert('L')
             else:
                 raise 'error in %s' % self.categories[index]
+        _target = np.array(_target).astype(dtype=np.float32)
         return _img, _target
 
     def transform_vis(self,sample):
-        pre_trans = tr.Resize(self.args.crop_size,shrink=self.args.shrink)
-        temp = pre_trans(sample)
         composed_transforms = transforms.Compose([
+            tr.Resize(self.args.crop_size,shrink=self.args.shrink),
             tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std),
             tr.ToTensor()
         ])
-        res = composed_transforms({'image':temp['image'],'label':temp['label']})
-        return {'image':res['image'],'label':res['label'],'ow':temp['ow'],'oh':temp['oh']}
+        return composed_transforms(sample)
 
     def __len__(self):
         return len(self.images)
@@ -276,7 +273,7 @@ def main():
                         help='crop image size')
     parser.add_argument('--shrink',type=int,default=None)
     # training hyper params
-
+    parser.add_argument('--bgr_mode',action='store_true', default=False,help='input image is bgr but rgb')
     parser.add_argument('--batch_size', type=int, default=None,
                         metavar='N', help='input batch size for \
                                 training (default: auto)')
@@ -293,8 +290,6 @@ def main():
 
 
     args = parser.parse_args()
-    args.network1 = network_map[args.backbone1]
-    args.network2 = network_map[args.backbone2]
     args.cuda = not args.no_cuda and torch.cuda.is_available()    
     args.gpus = torch.cuda.device_count()
     print("torch.cuda.device_count()=",args.gpus)
