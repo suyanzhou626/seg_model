@@ -41,7 +41,8 @@ class ToTensor(object):
         # torch image: C X H X W
         img = sample['image']
         mask = sample['label']
-        img = img.transpose((2, 0, 1))
+        img = img.transpose((2, 0, 1)).copy()
+        mask = mask.copy()
 
         sample['image'] = torch.from_numpy(img).float()
         sample['label'] = torch.from_numpy(mask).float()
@@ -78,23 +79,26 @@ class RandomRotate(object):
         return sample
 
 class Resize(object):
-    def __init__(self,target_size,shrink=16):
-        self.size = target_size[0] if isinstance(target_size,list) else target_size
+    def __init__(self,output_size,shrink=16,is_continuous=False):
+        assert isinstance(output_size, (int, tuple))
+        if isinstance(output_size, int):
+            self.output_size = (output_size,output_size)
+        else:
+            self.output_size = output_size
+        self.seg_interpolation = cv2.INTER_CUBIC if is_continuous else cv2.INTER_NEAREST
         self.shrink = shrink
     
     def __call__(self,sample):
         img = sample['image']
-        mask = sample['label']
-        w, h = img.size
-        scale = min(self.size/float(w),self.size/float(h))
+        h, w ,_ = img.shape
+        scale = min(self.output_size[1]/float(w),self.output_size[0]/float(h))
         out_w = int(w*scale)
         out_h = int(h*scale)
         out_w = ((out_w - 1 + self.shrink -1) // self.shrink) * self.shrink +1
         out_h = ((out_h - 1 + self.shrink -1) // self.shrink) * self.shrink +1
-        img = img.resize((out_w,out_h),Image.BILINEAR)
-        return {'image': img,
-                'label': mask,
-                'ow':w,'oh':h}
+        img = cv2.resize(img, dsize=(out_w,out_h), interpolation=cv2.INTER_CUBIC)
+        sample['image'] = img
+        return sample
 
 class RandomScale(object):
     def __init__(self,rand_resize,is_continuous=False):
@@ -105,8 +109,8 @@ class RandomScale(object):
         img = sample['image']
         mask = sample['label']
         # random scale (short edge)
-        w, h = img.size
-        rand_scale = random.randint(self.rand_resize[0], self.rand_resize[1])
+        h, w ,_ = img.shape
+        rand_scale = random.uniform(self.rand_resize[0], self.rand_resize[1])
         img = cv2.resize(img, None, fx=rand_scale, fy=rand_scale, interpolation=cv2.INTER_CUBIC)
         mask = cv2.resize(mask, None, fx=rand_scale, fy=rand_scale, interpolation=self.seg_interpolation)
         sample['image'] = img
@@ -115,7 +119,7 @@ class RandomScale(object):
         return sample
 
 class RandomCrop(object):
-    def __init__(self,crop_size,is_continuous=False):
+    def __init__(self,crop_size):
         assert isinstance(crop_size, (int, tuple))
         if isinstance(crop_size, int):
             self.crop_size = (crop_size, crop_size)
@@ -124,58 +128,23 @@ class RandomCrop(object):
             self.crop_size = crop_size
 
     def __call__(self,sample):
-        img = sample['imaga']
+        img = sample['image']
         mask = sample['label']
-        h, w = img.shape[:2]
+        h, w ,_ = img.shape
         new_h, new_w = self.crop_size
-        new_h = new_h if new_h < h else h
-        new_w = new_w if new_w < w else w
         new_img = np.zeros((new_h,new_w,3),dtype=np.float)
         new_mask = np.zeros((new_h,new_w),dtype=np.float)
-        
-
-
-class FixedResize(object):
-    def __init__(self, size):
-        self.size = (size, size)  # size: (h, w)
-
-    def __call__(self, sample):
-        img = sample['image']
-        mask = sample['label']
-
-        assert img.size == mask.size
-        
-        img = img.resize(self.size, Image.BILINEAR)
-        mask = mask.resize(self.size, Image.NEAREST)
-
-        return {'image': img,
-                'label': mask}
-
-class FixedResize_new(object):
-    def __init__(self,crop_size):
-        self.size = crop_size
-
-    def __call__(self,sample):
-        img = sample['image']
-        mask = sample['label']
-
-        assert img.size == mask.size
-
-        w, h = img.size
-        if h < w:
-            ow = self.size
-            oh = int(1.0 * h * ow / w)
-        else:
-            oh = self.size
-            ow = int(1.0 * w * oh / h)
-        img = img.resize((ow, oh), Image.BILINEAR)
-        mask = mask.resize((ow, oh), Image.NEAREST)
-        padh = self.size - oh if oh < self.size else 0
-        padw = self.size - ow if ow < self.size else 0
-        img = ImageOps.expand(img, border=(0, 0, padw, padh), fill=0)
-        mask = ImageOps.expand(mask,border=(0, 0, padw, padh), fill=0)
-        return {'image': img,
-                'label': mask}
+        padw = max(0,w-new_w)
+        padh = max(0,h-new_h)
+        w_begin = random.randint(0,padw)
+        h_begin = random.randint(0,padh)
+        w_end = w_begin + min(w,new_w)
+        h_end = h_begin + min(h,new_h)
+        new_img[0:min(h,new_h),0:min(w,new_w)] = img[h_begin:h_end,w_begin:w_end]
+        new_mask[0:min(h,new_h),0:min(w,new_w)] = mask[h_begin:h_end,w_begin:w_end]
+        sample['image'] = new_img
+        sample['label'] = new_mask
+        return sample
 
 def onehot(label, num):
     m = label

@@ -67,7 +67,7 @@ class Trainer(object):
             weight = None
         
         # Define network
-        model = self.args.network(self.args)
+        model = generate_net(self.args)
         if self.args.ft:
             train_params = model.parameters()
         else:
@@ -87,7 +87,7 @@ class Trainer(object):
 
         # Define Criterion
         # whether to use class balanced weights
-        self.criterion = SegmentationLosses(weight=weight, cuda=self.args.cuda,foreloss_weight=args.foreloss_weight,seloss_weight=args.seloss_weight).build_loss(mode=self.args.loss_type)
+        self.criterion = SegmentationLosses(weight=weight, cuda= not self.args.no_cuda,foreloss_weight=args.foreloss_weight,seloss_weight=args.seloss_weight).build_loss(mode=self.args.loss_type)
         self.model, self.optimizer = model, optimizer
         
         # Define Evaluator
@@ -97,6 +97,7 @@ class Trainer(object):
         self.scheduler = LR_Scheduler(self.args.lr_scheduler, self.args.lr,
                                             self.args.epochs, len(self.train_loader))
         self.model = self.model.cuda()
+        self.args.start_epoch = 0
         # Resuming checkpoint
         self.best_pred = 0.0
         if self.args.resume is not None:
@@ -124,8 +125,6 @@ class Trainer(object):
         self.model = DistModule(self.model,sync=False)
 
         # Clear start epoch if fine-tuning
-        if self.args.ft:
-            self.args.start_epoch = 0
         if rank == 0:
             print('Starting Epoch:', self.args.start_epoch)
             print('Total Epoches:', self.args.epochs)
@@ -140,7 +139,7 @@ class Trainer(object):
             start_time = time.time()
         for i,sample in enumerate(self.train_loader):
             image, target = sample['image'], sample['label']
-            if self.args.cuda:
+            if not self.args.no_cuda:
                 image, target = image.cuda(), target.cuda()
             current_lr = self.scheduler(self.optimizer, i, epoch, self.best_pred)
             self.optimizer.zero_grad()
@@ -156,7 +155,7 @@ class Trainer(object):
             target_array = target.cpu().numpy()
             pred = np.argmax(pred, axis=1)
             self.evaluator_inner.add_batch(target_array,pred)
-            if i % self.args.display_iter == 0:
+            if i % 10 == 0:
                 Acc_train = torch.Tensor([self.evaluator_inner.Pixel_Accuracy()])
                 Acc_class_train = torch.Tensor([self.evaluator_inner.Pixel_Accuracy_Class()])
                 mIoU_train,IoU_train = self.evaluator_inner.Mean_Intersection_over_Union()
@@ -209,8 +208,8 @@ class Trainer(object):
             print('\nValidation')
             start_time = time.time()
         for i, sample in enumerate(self.val_loader):
-            image, target,ow,oh = sample['image'], sample['label'],sample['ow'], sample['oh']
-            if self.args.cuda:
+            image, target = sample['image'], sample['label']
+            if not self.args.no_cuda:
                 image, target = image.cuda(), target.cuda()
             with torch.no_grad():
                 output = self.model(image)
@@ -281,6 +280,7 @@ def main():
 
     # necessary train param
     parser.add_argument('--input_size', type=int, default=None,help='crop image size')
+    parser.add_argument('--test_size',type=int,default=None)
     parser.add_argument('--shrink',type=int,default=None)
     parser.add_argument('--num_classes',type=int,default=None,help='the number of classes')
 
@@ -337,6 +337,8 @@ def main():
                         help='finetuning on a different dataset')
 
     args = parser.parse_args()
+    if args.test_size is None:
+        args.test_size = args.input_size
     torch.manual_seed(args.seed)
     trainer = Trainer(args)
     for epoch in range(trainer.args.start_epoch, trainer.args.epochs):

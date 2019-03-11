@@ -6,11 +6,10 @@ import PIL.Image as img
 import cv2
 from torch.utils.data import DataLoader,Dataset
 from dataloaders import custom_transforms as tr
-from modeling import network_map
+from modeling.generatenet import generate_net
 from torchvision import transforms
 from modeling.sync_batchnorm.replicate import patch_replication_callback
 from dataloaders.utils import decode_seg_map_sequence
-from modeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
 from utils.metrics import Evaluator
 from collections import OrderedDict
 class GenDataset(Dataset):
@@ -40,10 +39,7 @@ class GenDataset(Dataset):
             self.categories.append(_cat)
         print('all images have: %d, discard %d' % (temp_all,temp_discard))
         assert (len(self.images) == len(self.categories))
-        if not 'rank' in args:
-            print('Number of images in {}: {:d}'.format(self._data_list.split('/')[-1], len(self.images)))
-        elif args.rank == 0:
-            print('Number of images in {}: {:d}'.format(self._data_list.split('/')[-1], len(self.images)))
+        print('Number of images in {}: {:d}'.format(self._data_list.split('/')[-1], len(self.images)))
 
     def __getitem__(self, index):
         _img, _target = self._make_img_gt_point_pair(index)
@@ -56,8 +52,9 @@ class GenDataset(Dataset):
 
     def _make_img_gt_point_pair(self, index):
         _img = img.open(self.images[index]).convert('RGB')
-        temp = np.array(_img)[:,:,::-1].copy()  #convert to BGR
-        _img = img.fromarray(temp.astype(dtype=np.uint8),mode='RGB')
+        _img = np.array(_img).astype(dtype=np.float32)
+        if self.args.bgr_mode:
+            _img = np.array(_img)[:,:,::-1].copy()  #convert to BGR
         _target = img.open(self.categories[index])
         if (_target.mode != 'L' and _target.mode != 'P'):
             temp = np.unique(np.array(_target))
@@ -65,17 +62,16 @@ class GenDataset(Dataset):
                 _target = _target.convert('L')
             else:
                 raise 'error in %s' % self.categories[index]
+        _target = np.array(_target).astype(dtype=np.float32)
         return _img, _target
 
     def transform_vis(self,sample):
-        pre_trans = tr.Resize(self.args.crop_size,shrink=self.args.shrink)
-        temp = pre_trans(sample)
         composed_transforms = transforms.Compose([
+            tr.Resize(self.args.crop_size,shrink=self.args.shrink),
             tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std),
             tr.ToTensor()
         ])
-        res = composed_transforms({'image':temp['image'],'label':temp['label']})
-        return {'image':res['image'],'label':res['label'],'ow':temp['ow'],'oh':temp['oh']}
+        return composed_transforms(sample)
 
     def __len__(self):
         return len(self.images)
@@ -86,14 +82,11 @@ class GenDataset(Dataset):
 class Valuator(object):
     def __init__(self, args):
         self.args = args
-        if self.args.sync_bn:
-            self.args.batchnorm_function = SynchronizedBatchNorm2d
-        else:
-            self.args.batchnorm_function = torch.nn.BatchNorm2d
+        self.args.batchnorm_function = torch.nn.BatchNorm2d
         # Define Dataloader
         self.nclass = self.args.num_classes
         # Define network
-        model = self.args.network(self.args)
+        model = generate_net(self.args)
 
         self.model = model
         self.evaluator = Evaluator(self.nclass)
@@ -133,7 +126,7 @@ class Valuator(object):
         num_img_tr = len(vis_loader)
         print('=====>[numImages: %5d]' % (num_img_tr * self.args.batch_size))
         for i, sample in enumerate(vis_loader):
-            image, target ,name, ori,ow,oh = sample['image'], sample['label'], sample['name'], sample['ori'],sample['ow'], sample['oh']
+            image, target ,name, ori = sample['image'], sample['label'], sample['name'], sample['ori']
             if self.args.cuda:
                 image, target = image.cuda(), target.cuda()
             with torch.no_grad():
@@ -213,9 +206,6 @@ class Valuator(object):
 
 def main():
     parser = argparse.ArgumentParser(description="PyTorch vnet Training")
-
-    # parser.add_argument('--out_stride', type=int, default=8,
-    #                     help='network output stride (default: 8)')
     parser.add_argument('--backbone',type=str,default=None,help='choose the network') 
     parser.add_argument('--data_dir',type=str,default=None,
                         help='path to dataset which add the *.txt is the image path')
@@ -227,7 +217,7 @@ def main():
                         help='crop image size')
     parser.add_argument('--shrink',type=int,default=None)
     # training hyper params
-
+    parser.add_argument('--bgr_mode',action='store_true', default=False,help='input image is bgr but rgb')
     parser.add_argument('--batch_size', type=int, default=None,
                         metavar='N', help='input batch size for \
                                 training (default: auto)')
@@ -243,17 +233,7 @@ def main():
 
 
     args = parser.parse_args()
-    args.ft = False
-    args.network = network_map[args.backbone]
     args.cuda = not args.no_cuda and torch.cuda.is_available()    
-    args.gpus = torch.cuda.device_count()
-    print("torch.cuda.device_count()=",args.gpus)
-    if args.cuda and args.gpus > 1:
-        args.sync_bn = True
-    else:
-        args.sync_bn = False
-    # if args.test_batch_size is None:
-    #     args.test_batch_size = args.batch_size
     print(args)
     valuator = Valuator(args)
     valuator.visual()

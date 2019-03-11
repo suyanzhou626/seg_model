@@ -86,6 +86,7 @@ class McDataset(Dataset):
         if self.args.rotate > 0:
             temp.append(tr.RandomRotate(self.args.rotate))
         temp.append(tr.RandomScale(rand_resize=self.args.rand_resize))
+        temp.append(tr.RandomCrop(self.args.input_size))
         temp.append(tr.RandomHorizontalFlip())
         temp.append(tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std))
         if self.args.noise_param is not None:
@@ -96,11 +97,9 @@ class McDataset(Dataset):
         return composed_transforms(sample)
 
     def transform_val(self, sample):
-        pre_trans = tr.Resize(self.args.test_size,shrink=self.args.shrink)
-        temp = pre_trans(sample)
         composed_transforms = transforms.Compose([
+            tr.Resize(self.args.test_size,shrink=self.args.shrink),
             tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std),
             tr.ToTensor()])
-        res = composed_transforms({'image':temp['image'],'label':temp['label']})
 
-        return {'image':res['image'],'label':res['label'],'ow':temp['ow'],'oh':temp['oh']}
+        return composed_transforms(sample)

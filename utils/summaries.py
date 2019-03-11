@@ -7,7 +7,7 @@ from dataloaders.utils import decode_seg_map_sequence
 class TensorboardSummary(object):
         
     def create_summary(self, directory):
-        writer = SummaryWriter(log_dir=os.path.join(self.directory))
+        writer = SummaryWriter(log_dir=os.path.join(directory))
         return writer
 
     def visualize_image(self, writer, dataset, image, target, output, global_step):
