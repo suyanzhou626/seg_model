@@ -49,8 +49,7 @@ class DeepLabv3plus(nn.Module):
 				nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
 		self.backbone = Xception(os=16,BatchNorm=BatchNorm)
 		self.backbone_layers = self.backbone.get_layers()
-		# if args.ft and args.resume is None:
-		# 	self.load_pretrained(backbone=args.model_backbone)
+
 
 	def forward(self, x):
 		x_bottom = self.backbone(x)
@@ -66,21 +65,3 @@ class DeepLabv3plus(nn.Module):
 		result = self.cls_conv(result)
 		# result = self.upsample4(result)
 		return result
-
-	def load_pretrained(self,backbone=None):
-		path = '/mnt/lustre/wuyao/Data/segmentation_pytorch_model/pascal/all/deeplab_{}/model_init.pth'.format(backbone)
-		checkpoint = torch.load(path)
-		new_state_dict = OrderedDict()
-		for k,v in checkpoint.items():
-			if 'cls_conv' in k:
-				continue
-			elif 'module' in k:
-				name = k[7:]
-			else:
-				name = k
-			new_state_dict[name] = v
-		self.load_state_dict(new_state_dict,strict=False)
-		del checkpoint,new_state_dict,k,v,name
-		gc.collect
-		torch.cuda.empty_cache()
-		print('success for loading pretrained model')

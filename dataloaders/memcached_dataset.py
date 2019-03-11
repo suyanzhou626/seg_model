@@ -1,7 +1,7 @@
 import mc
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import Dataset
 import numpy as np
-from dataloaders import custom_transforms as tr
+from . import custom_transforms as tr
 from torchvision import transforms
 import io
 from PIL import Image
@@ -9,16 +9,17 @@ import os
 
 import linklink as link
 
-def pil_loader(img_str):
+def pil_loader(img_str,bgr_mode=False):
     buff = io.BytesIO(img_str)
     
     img = Image.open(buff)
     img = img.convert('RGB')
-    temp = np.array(img)[:,:,::-1].copy()  #convert to BGR
-    img = Image.fromarray(temp.astype(dtype=np.uint8),mode='RGB')
+    img = np.array(img).astype(dtype=np.float32)
+    if bgr_mode:
+        img = img[:,:,::-1]  #convert to BGR
     return img
 
-def pil_loader_label(img_str):
+def pil_loader_label(img_str,bgr_mode=False):
     buff = io.BytesIO(img_str)
     img = Image.open(buff)
     if (img.mode != 'L' and img.mode != 'P'):
@@ -28,6 +29,7 @@ def pil_loader_label(img_str):
             else:
                 raise 'error'
     # img = img.convert('L')
+    img = np.array(img).astype(dtype=np.float32)
     return img
  
 class McDataset(Dataset):
@@ -69,8 +71,8 @@ class McDataset(Dataset):
         self.mclient.Get(label_filename, label_value)
         image_value_str = mc.ConvertBuffer(image_value)
         label_value_str = mc.ConvertBuffer(label_value)
-        img = pil_loader(image_value_str)
-        label = pil_loader_label(label_value_str)
+        img = pil_loader(image_value_str,bgr_mode=self.args.bgr_mode)
+        label = pil_loader_label(label_value_str,bgr_mode=self.args.bgr_mode)
         sample = {'image':img,'label':label}
         if self.split == 'train':
             sample = self.transform_tr(sample)
@@ -81,12 +83,10 @@ class McDataset(Dataset):
 
     def transform_tr(self, sample):
         temp = []
-        if self.args.rotate is not None:
-            temp.append(tr.RandomRotate(degree=self.args.rotate))
-        temp.append(tr.RandomScaleCrop(crop_size=self.args.crop_size,rand_resize=self.args.rand_resize))
+        if self.args.rotate > 0:
+            temp.append(tr.RandomRotate(self.args.rotate))
+        temp.append(tr.RandomScale(rand_resize=self.args.rand_resize))
         temp.append(tr.RandomHorizontalFlip())
-        if self.args.blur == True:
-            temp.append(tr.RandomGaussianBlur())
         temp.append(tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std))
         if self.args.noise_param is not None:
             temp.append(tr.GaussianNoise(mean=self.args.noise_param[0],std=self.args.noise_param[1]))

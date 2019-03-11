@@ -1,4 +1,3 @@
-import argparse
 import os
 import numpy as np
 import torch
@@ -7,7 +6,7 @@ import gc
 import linklink as link
 from torch.utils.data import DataLoader
 from collections import OrderedDict
-from modeling import network_map
+from modeling.generatenet import generate_net
 from dataloaders.memcached_dataset import McDataset
 from utils.loss import SegmentationLosses
 from utils.calculate_weights import calculate_weigths_labels
@@ -21,31 +20,25 @@ from utils.utils import DistributedSampler,simple_group_split,DistributedGivenIt
 class Trainer(object):
     def __init__(self, args):
         rank, world_size = dist_init()
-        if args.bn_group_size is None:
-            args.bn_group_size = world_size
         args.bn_var_mode = (link.syncbnVarMode_t.L1 
                                        if args.bn_var_mode == 'L1' 
                                        else link.syncbnVarMode_t.L2)
         args.rank = rank
         args.world_size = world_size
-        args.bn_group = simple_group_split(world_size, rank, world_size//args.bn_group_size)
+        args.bn_group = simple_group_split(world_size, rank, 1)
+        args.gpus = torch.cuda.device_count()
+
         self.args = args
         def BNFunc(*args, **kwargs):
             return link.nn.SyncBatchNorm2d(*args, group=self.args.bn_group, sync_stats=True, var_mode=self.args.bn_var_mode, **kwargs)
-        if self.args.sync_bn:
-            self.args.batchnorm_function = BNFunc
-        else:
-            self.args.batchnorm_function = torch.nn.BatchNorm2d
+        self.args.batchnorm_function = BNFunc
         if rank == 0:
-            print("torch.cuda.device_count()=",self.args.gpus)
             print(self.args)
         # Define Saver
             self.saver = Saver(self.args)
-        if rank == 0:
-            self.saver.save_experiment_config()
-            # Define Tensorboard Summary
-            self.summary = TensorboardSummary(self.saver.experiment_dir)
-            self.writer = self.summary.create_summary()
+        # Define Tensorboard Summary
+            self.summary = TensorboardSummary()
+            self.writer = self.summary.create_summary(self.saver.experiment_dir)
         
         kwargs = {'num_workers': self.args.gpus, 'pin_memory': True}
         self.train_set = McDataset(self.args,self.args.train_list,split='train')
@@ -276,52 +269,47 @@ class Trainer(object):
             }, is_best)
 
 def main():
+    import argparse
     parser = argparse.ArgumentParser(description="PyTorch vnet Training")
-
-    # parser.add_argument('--out_stride', type=int, default=8,
-    #                     help='network output stride (default: 8)')
+    # necessary param about: model,dataset
     parser.add_argument('--backbone',type=str,default=None,help='choose the network') 
-    parser.add_argument('--dataset', type=str, default=None,
-                        help='dataset name (default: pascal)')
+    parser.add_argument('--dataset', type=str, default=None,help='dataset name (default: pascal)')
     parser.add_argument('--data_dir',type=str,default=None,
                         help='path to dataset which add the *.txt is the image path')
     parser.add_argument('--train_list',type=str,default=None,help='path to train.txt')
     parser.add_argument('--val_list',type=str,default=None,help='path to val.txt')
-    parser.add_argument('--crop_size', type=int, default=None,
-                        help='crop image size')
+
+    # necessary train param
+    parser.add_argument('--input_size', type=int, default=None,help='crop image size')
     parser.add_argument('--shrink',type=int,default=None)
-    parser.add_argument('--test_size',type=int,default=None)
+    parser.add_argument('--num_classes',type=int,default=None,help='the number of classes')
+
+    # optional train param
+    parser.add_argument('--bgr_mode',action='store_true', default=False,help='input image is bgr but rgb')
     parser.add_argument('--normal_mean',type=float, nargs='*',default=[104.008,116.669,122.675])
     parser.add_argument('--normal_std',type=float,default=1.0)
     parser.add_argument('--rand_resize',type=float, nargs='*',default=[0.75,1.25])
-    parser.add_argument('--rotate',type=int,default=None)
+    parser.add_argument('--rotate',type=int,default=0)
     parser.add_argument('--noise_param',type=float,nargs='*',default=None)
-    parser.add_argument('--blur',action='store_true',default=False)
-    parser.add_argument('--num_classes',type=int,default=None,help='the number of classes')
     parser.add_argument('--loss_type', type=str, default='ce',
                         choices=['ce', 'focal'],
                         help='loss func type (default: ce)')
     parser.add_argument('--foreloss_weight',type=float,default=1)
     parser.add_argument('--seloss_weight',type=float,default=1)
+
     # training hyper params
-    parser.add_argument('--display_iter',type=int,default=10)
     parser.add_argument('--epochs', type=int, default=None, metavar='N',
                         help='number of epochs to train (default: auto)')
-    parser.add_argument('--start_epoch', type=int, default=0,
-                        metavar='N', help='start epochs (default:0)')
     parser.add_argument('--batch_size', type=int, default=None,
                         metavar='N', help='input batch size for \
                                 training (default: auto)')
-    parser.add_argument('--optim_method',type=str,default='sgd')
-    parser.add_argument('--bn_group_size',type=int,default=None)
     parser.add_argument('--bn_var_mode',type=str,default='L2')
-    # parser.add_argument('--test_batch_size', type=int, default=None,
-    #                     metavar='N', help='input batch size for \
-    #                             testing (default: auto)')
     parser.add_argument('--use_balanced_weights', action='store_true', default=False,
                         help='whether to use balanced weights (default: False)')
     parser.add_argument('--save_dir',type=str,default=None,help='path to save model')
+
     # optimizer params
+    parser.add_argument('--optim_method',type=str,default='sgd')
     parser.add_argument('--lr', type=float, default=None, metavar='LR',
                         help='learning rate (default: auto)')
     parser.add_argument('--lr_scheduler', type=str, default='poly',
@@ -333,46 +321,27 @@ def main():
                         metavar='M', help='w-decay (default: 1e-4)')
     parser.add_argument('--nesterov', action='store_true', default=False,
                         help='whether use nesterov (default: False)')
+
     # cuda, seed and logging
     parser.add_argument('--no_cuda', action='store_true', default=
                         False, help='disables CUDA training')
     parser.add_argument('--seed', type=int, default=1, metavar='S',
                         help='random seed (default: 1)')
+
     # checking point
     parser.add_argument('--resume', type=str, default=None,
                         help='put the path to resuming file if needed')
-    parser.add_argument('--checkname', type=str, default=None,
-                        help='set the checkpoint name')
+
     # finetuning pre-trained models
     parser.add_argument('--ft', action='store_true', default=False,
                         help='finetuning on a different dataset')
-    # evaluation option
-    parser.add_argument('--eval_interval', type=int, default=1,
-                        help='evaluuation interval (default: 1)')
-    parser.add_argument('--use_link',action='store_true',default=True)
 
     args = parser.parse_args()
-    args.model_backbone = None
-    if 'deeplab' in args.backbone:
-        temp = args.backbone.split('_')
-        args.model_backbone = temp[1]
-    args.network = network_map[args.backbone]
-    args.cuda = not args.no_cuda and torch.cuda.is_available()    
-    args.gpus = torch.cuda.device_count()
-    if args.cuda and args.gpus > 1:
-        args.sync_bn = True
-    else:
-        args.sync_bn = False
-    # if args.test_batch_size is None:
-    #     args.test_batch_size = args.batch_size
-    if args.checkname is None:
-        args.checkname = args.backbone
     torch.manual_seed(args.seed)
     trainer = Trainer(args)
     for epoch in range(trainer.args.start_epoch, trainer.args.epochs):
         trainer.training(epoch)
-        if epoch % args.eval_interval == (args.eval_interval - 1):
-            trainer.validation(epoch)
+        trainer.validation(epoch)
     if trainer.args.rank == 0:
         trainer.writer.close()
 

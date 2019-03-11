@@ -2,6 +2,7 @@ import torch
 import random
 import numpy as np
 import skimage as skimg
+import cv2
 from PIL import Image, ImageOps, ImageFilter
 
 class GaussianNoise(object):
@@ -10,11 +11,9 @@ class GaussianNoise(object):
         self.std = std
     def __call__(self,sample):
         img = sample['image']
-        mask = sample['label']
-        img = skimg.util.random_noise(img,mode='gaussian',mean=self.mean,var=(self.std)**2)
+        sample['image'] = skimg.util.random_noise(img,mode='gaussian',mean=self.mean,var=(self.std)**2)
 
-        return {'image': img,
-                'label': mask}
+        return sample
 
 class Normalize(object):
     """Normalize a tensor image with mean and standard deviation.
@@ -27,15 +26,11 @@ class Normalize(object):
         self.std = std
     def __call__(self, sample):
         img = sample['image']
-        mask = sample['label']
-        img = np.array(img).astype(np.float32)
-        mask = np.array(mask).astype(np.float32)
         img -= self.mean
         img /= self.std
+        sample['image'] = img
 
-        return {'image': img,
-                'label': mask}
-
+        return sample
 
 class ToTensor(object):
     """Convert ndarrays in sample to Tensors."""
@@ -46,41 +41,41 @@ class ToTensor(object):
         # torch image: C X H X W
         img = sample['image']
         mask = sample['label']
-        img = np.array(img).astype(np.float32).transpose((2, 0, 1))
-        mask = np.array(mask).astype(np.float32)
+        img = img.transpose((2, 0, 1))
 
-        img = torch.from_numpy(img).float()
-        mask = torch.from_numpy(mask).float()
+        sample['image'] = torch.from_numpy(img).float()
+        sample['label'] = torch.from_numpy(mask).float()
 
-        return {'image': img,
-                'label': mask}
+        return sample
 
 
 class RandomHorizontalFlip(object):
     def __call__(self, sample):
-        img = sample['image']
-        mask = sample['label']
-        if random.random() < 0.5:
-            img = img.transpose(Image.FLIP_LEFT_RIGHT)
-            mask = mask.transpose(Image.FLIP_LEFT_RIGHT)
-
-        return {'image': img,
-                'label': mask}
+        image, segmentation = sample['image'], sample['label']
+        if np.random.rand() < 0.5:
+            image_flip = np.flip(image, axis=1)
+            segmentation_flip = np.flip(segmentation, axis=1)
+            sample['image'] = image_flip
+            sample['label'] = segmentation_flip
+        return sample
 
 
 class RandomRotate(object):
-    def __init__(self, degree):
-        self.degree = degree
+    """Randomly rotate image"""
+    def __init__(self, angle_r, is_continuous=False):
+        self.angle_r = angle_r
+        self.seg_interpolation = cv2.INTER_CUBIC if is_continuous else cv2.INTER_NEAREST
 
     def __call__(self, sample):
-        img = sample['image']
-        mask = sample['label']
-        rotate_degree = random.uniform(-1*self.degree, self.degree)
-        img = img.rotate(rotate_degree, Image.BILINEAR)
-        mask = mask.rotate(rotate_degree, Image.NEAREST)
-
-        return {'image': img,
-                'label': mask}
+        image, segmentation = sample['image'], sample['label']
+        row, col, _ = image.shape
+        rand_angle = np.random.randint(-self.angle_r, self.angle_r) if self.angle_r != 0 else 0
+        m = cv2.getRotationMatrix2D(center=(col/2, row/2), angle=rand_angle, scale=1)
+        new_image = cv2.warpAffine(image, m, (col,row), flags=cv2.INTER_CUBIC, borderValue=0)
+        new_segmentation = cv2.warpAffine(segmentation, m, (col,row), flags=self.seg_interpolation, borderValue=0)
+        sample['image'] = new_image
+        sample['label'] = new_segmentation
+        return sample
 
 class Resize(object):
     def __init__(self,target_size,shrink=16):
@@ -101,80 +96,44 @@ class Resize(object):
                 'label': mask,
                 'ow':w,'oh':h}
 
-class RandomGaussianBlur(object):
-    def __call__(self, sample):
-        img = sample['image']
-        mask = sample['label']
-        if random.random() < 0.5:
-            img = img.filter(ImageFilter.GaussianBlur(
-                radius=random.random()))
-
-        return {'image': img,
-                'label': mask}
-
-
-class RandomScaleCrop(object):
-    def __init__(self, crop_size,rand_resize):
-        self.crop_size = crop_size
+class RandomScale(object):
+    def __init__(self,rand_resize,is_continuous=False):
         self.rand_resize = [0.75,1.25] if rand_resize is None else rand_resize
+        self.seg_interpolation = cv2.INTER_CUBIC if is_continuous else cv2.INTER_NEAREST
 
     def __call__(self, sample):
         img = sample['image']
         mask = sample['label']
         # random scale (short edge)
         w, h = img.size
-        self.base_size = min(w,h)
-        short_size = random.randint(int(self.base_size * self.rand_resize[0]), int(self.base_size * self.rand_resize[1]))
-        if h > w:
-            ow = short_size
-            oh = int(1.0 * h * ow / w)
+        rand_scale = random.randint(self.rand_resize[0], self.rand_resize[1])
+        img = cv2.resize(img, None, fx=rand_scale, fy=rand_scale, interpolation=cv2.INTER_CUBIC)
+        mask = cv2.resize(mask, None, fx=rand_scale, fy=rand_scale, interpolation=self.seg_interpolation)
+        sample['image'] = img
+        sample['label'] = mask
+
+        return sample
+
+class RandomCrop(object):
+    def __init__(self,crop_size,is_continuous=False):
+        assert isinstance(crop_size, (int, tuple))
+        if isinstance(crop_size, int):
+            self.crop_size = (crop_size, crop_size)
         else:
-            oh = short_size
-            ow = int(1.0 * w * oh / h)
-        img = img.resize((ow, oh), Image.BILINEAR)
-        mask = mask.resize((ow, oh), Image.NEAREST)
-        # pad crop
-        if short_size < self.crop_size:
-            padh = self.crop_size - oh if oh < self.crop_size else 0
-            padw = self.crop_size - ow if ow < self.crop_size else 0
-            img = ImageOps.expand(img, border=(0, 0, padw, padh), fill=0)
-            mask = ImageOps.expand(mask, border=(0, 0, padw, padh), fill=0)
-        # random crop crop_size
-        w, h = img.size
-        x1 = random.randint(0, w - self.crop_size)
-        y1 = random.randint(0, h - self.crop_size)
-        img = img.crop((x1, y1, x1 + self.crop_size, y1 + self.crop_size))
-        mask = mask.crop((x1, y1, x1 + self.crop_size, y1 + self.crop_size))
+            assert len(crop_size) == 2
+            self.crop_size = crop_size
 
-        return {'image': img,
-                'label': mask}
-
-
-class FixScaleCrop(object):
-    def __init__(self, crop_size):
-        self.crop_size = crop_size
-
-    def __call__(self, sample):
-        img = sample['image']
+    def __call__(self,sample):
+        img = sample['imaga']
         mask = sample['label']
-        w, h = img.size
-        if w > h:
-            oh = self.crop_size
-            ow = int(1.0 * w * oh / h)
-        else:
-            ow = self.crop_size
-            oh = int(1.0 * h * ow / w)
-        img = img.resize((ow, oh), Image.BILINEAR)
-        mask = mask.resize((ow, oh), Image.NEAREST)
-        # center crop
-        w, h = img.size
-        x1 = int(round((w - self.crop_size) / 2.))
-        y1 = int(round((h - self.crop_size) / 2.))
-        img = img.crop((x1, y1, x1 + self.crop_size, y1 + self.crop_size))
-        mask = mask.crop((x1, y1, x1 + self.crop_size, y1 + self.crop_size))
+        h, w = img.shape[:2]
+        new_h, new_w = self.crop_size
+        new_h = new_h if new_h < h else h
+        new_w = new_w if new_w < w else w
+        new_img = np.zeros((new_h,new_w,3),dtype=np.float)
+        new_mask = np.zeros((new_h,new_w),dtype=np.float)
+        
 
-        return {'image': img,
-                'label': mask}
 
 class FixedResize(object):
     def __init__(self, size):
@@ -222,3 +181,16 @@ def onehot(label, num):
     m = label
     one_hot = np.eye(num)[m]
     return one_hot
+
+class Multiscale(object):
+    def __init__(self, rate_list):
+        self.rate_list = rate_list
+
+    def __call__(self, sample):
+        image = sample['image']
+        row, col, _ = image.shape
+        image_multiscale = []
+        for rate in self.rate_list:
+            rescaled_image = cv2.resize(image, None, fx=rate, fy=rate, interpolation=cv2.INTER_CUBIC)
+            sample['image_%f'%rate] = rescaled_image
+        return sample
