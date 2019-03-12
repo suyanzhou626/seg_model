@@ -90,6 +90,7 @@ class Resize(object):
     
     def __call__(self,sample):
         img = sample['image']
+        mask = sample['label']
         h, w ,_ = img.shape
         scale = min(self.output_size[1]/float(w),self.output_size[0]/float(h))
         out_w = int(w*scale)
@@ -97,7 +98,9 @@ class Resize(object):
         out_w = ((out_w - 1 + self.shrink -1) // self.shrink) * self.shrink +1
         out_h = ((out_h - 1 + self.shrink -1) // self.shrink) * self.shrink +1
         img = cv2.resize(img, dsize=(out_w,out_h), interpolation=cv2.INTER_CUBIC)
+        mask = cv2.resize(mask,dsize=(out_w,out_h), interpolation=self.seg_interpolation)
         sample['image'] = img
+        sample['label'] = mask
         return sample
 
 class RandomScale(object):
