@@ -35,10 +35,7 @@ class GenDataset(Dataset):
             self.categories.append(_cat)
         print('all images have: %d, discard %d' % (temp_all,temp_discard))
         assert (len(self.images) == len(self.categories))
-        if not 'rank' in args:
-            print('Number of images in {}: {:d}'.format(self._data_list.split('/')[-1], len(self.images)))
-        elif args.rank == 0:
-            print('Number of images in {}: {:d}'.format(self._data_list.split('/')[-1], len(self.images)))
+        print('Number of images in {}: {:d}'.format(self._data_list.split('/')[-1], len(self.images)))
 
     def __getitem__(self, index):
         _img, _target = self._make_img_gt_point_pair(index)
@@ -48,15 +45,12 @@ class GenDataset(Dataset):
             return self.transform_tr(sample)
         elif self.split == 'val':
             return self.transform_val(sample)
-        elif self.split == 'vis':
-            temp =  self.transform_vis(sample)
-            temp['name'] = self.images[index].split('/')[-1].split('.')[0]
-            return temp
 
     def _make_img_gt_point_pair(self, index):
         _img = Image.open(self.images[index]).convert('RGB')
-        temp = np.array(_img)[:,:,::-1].copy()  #convert to BGR
-        _img = Image.fromarray(temp.astype(dtype=np.uint8),mode='RGB')
+        _img = np.array(_img).astype(dtype=np.float32)
+        if self.args.bgr_mode:
+            _img = _img[:,:,::-1].copy()  #convert to BGR
         _target = Image.open(self.categories[index])
         if (_target.mode != 'L' and _target.mode != 'P'):
             temp = np.unique(np.array(_target))
@@ -64,16 +58,16 @@ class GenDataset(Dataset):
                 _target = _target.convert('L')
             else:
                 raise 'error in %s' % self.categories[index]
+        _target = np.array(_target).astype(dtype=np.float32)
         return _img, _target
 
     def transform_tr(self, sample):
         temp = []
-        if self.args.rotate is not None:
-            temp.append(tr.RandomRotate(degree=self.args.rotate))
-        temp.append(tr.RandomScaleCrop(crop_size=self.args.crop_size,rand_resize=self.args.rand_resize))
+        if self.args.rotate > 0:
+            temp.append(tr.RandomRotate(self.args.rotate))
+        temp.append(tr.RandomScale(rand_resize=self.args.rand_resize))
+        temp.append(tr.RandomCrop(self.args.input_size))
         temp.append(tr.RandomHorizontalFlip())
-        if self.args.blur == True:
-            temp.append(tr.RandomGaussianBlur())
         temp.append(tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std))
         if self.args.noise_param is not None:
             temp.append(tr.GaussianNoise(mean=self.args.noise_param[0],std=self.args.noise_param[1]))
@@ -82,31 +76,14 @@ class GenDataset(Dataset):
 
         return composed_transforms(sample)
 
-    # def transform_val(self, sample):
-
-    #     composed_transforms = transforms.Compose([
-    #         tr.FixedResize_new(crop_size=self.args.test_size),
-    #         tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std),
-    #         tr.ToTensor()])
-
-    #     return composed_transforms(sample)
-
     def transform_val(self, sample):
-        pre_trans = tr.Resize(self.args.test_size,shrink=self.args.shrink)
-        temp = pre_trans(sample)
         composed_transforms = transforms.Compose([
+            tr.Resize(self.args.test_size,shrink=self.args.shrink),
             tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std),
             tr.ToTensor()])
-        res = composed_transforms({'image':temp['image'],'label':temp['label']})
 
-        return {'image':res['image'],'label':res['label'],'ow':temp['ow'],'oh':temp['oh']}
-
-    def transform_vis(self,sample):
-        composed_transforms = transforms.Compose([
-            tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std),
-            tr.ToTensor()
-        ])
         return composed_transforms(sample)
+
 
     def __len__(self):
         return len(self.images)

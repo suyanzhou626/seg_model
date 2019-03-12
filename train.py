@@ -1,71 +1,40 @@
+import argparse
 import os
 import numpy as np
 import torch
 import time
 import gc
-import linklink as link
-from torch.utils.data import DataLoader
 from collections import OrderedDict
 from modeling.generatenet import generate_net
-from dataloaders.memcached_dataset import McDataset
+from dataloaders import make_data_loader
 from utils.loss import SegmentationLosses
 from utils.calculate_weights import calculate_weigths_labels
 from utils.lr_scheduler import LR_Scheduler
 from utils.saver import Saver
 from utils.summaries import TensorboardSummary
 from utils.metrics import Evaluator
-from utils.distributed_utils import *
-from utils.utils import DistributedSampler,simple_group_split,DistributedGivenIterationSampler
+from modeling.sync_batchnorm.replicate import patch_replication_callback
+from modeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
 
 class Trainer(object):
     def __init__(self, args):
-        rank, world_size = dist_init()
-        args.bn_var_mode = (link.syncbnVarMode_t.L1 
-                                       if args.bn_var_mode == 'L1' 
-                                       else link.syncbnVarMode_t.L2)
-        args.rank = rank
-        args.world_size = world_size
-        args.bn_group = simple_group_split(world_size, rank, 1)
-        args.gpus = torch.cuda.device_count()
-
         self.args = args
-        def BNFunc(*args, **kwargs):
-            return link.nn.SyncBatchNorm2d(*args, group=self.args.bn_group, sync_stats=True, var_mode=self.args.bn_var_mode, **kwargs)
-        self.args.batchnorm_function = BNFunc
-        if rank == 0:
-            print(self.args)
-        # Define Saver
-            self.saver = Saver(self.args)
-        # Define Tensorboard Summary
-            self.summary = TensorboardSummary()
-            self.writer = self.summary.create_summary(self.saver.experiment_dir)
-        
-        kwargs = {'num_workers': self.args.gpus, 'pin_memory': True}
-        self.train_set = McDataset(self.args,self.args.train_list,split='train')
-        self.val_set = McDataset(self.args,self.args.val_list,split='val')
-
-        self.train_sampler = DistributedSampler(self.train_set)
-        self.val_sampler = DistributedSampler(self.val_set,round_up=True)
-
-        self.train_loader = DataLoader(self.train_set,batch_size=self.args.batch_size,sampler=self.train_sampler)
-        self.val_loader = DataLoader(self.val_set,batch_size=1,sampler=self.val_sampler)
-        self.nclass = self.args.num_classes
-        weight = torch.from_numpy(np.zeros((self.nclass,))).type(torch.FloatTensor)
-
-        if self.args.use_balanced_weights:
-            classes_weights_path = os.path.join(self.args.save_dir, self.args.dataset,'classes_weights.npy')
-            if os.path.isfile(classes_weights_path):
-                weight = np.load(classes_weights_path)
-                weight = torch.from_numpy(weight.astype(np.float32))
-            elif rank == 0:
-                temp_train_loader = DataLoader(self.train_set, batch_size=self.args.batch_size, shuffle=True,drop_last = True, **kwargs)
-                weight = calculate_weigths_labels(self.args.save_dir,self.args.dataset, temp_train_loader, self.nclass)
-                weight = torch.from_numpy(weight.astype(np.float32)).type(torch.FloatTensor)
-            link.broadcast(weight,root=0)
-                    
+        if self.args.sync_bn:
+            self.args.batchnorm_function = SynchronizedBatchNorm2d
         else:
-            weight = None
+            self.args.batchnorm_function = torch.nn.BatchNorm2d
+        print(self.args)
+        # Define Saver
+        self.saver = Saver(self.args)
+        # Define Tensorboard Summary
+        self.summary = TensorboardSummary()
+        self.writer = self.summary.create_summary(self.saver.experiment_dir)
         
+        # Define Dataloader
+        kwargs = {'num_workers': self.args.gpus, 'pin_memory': True}
+        self.train_loader, self.val_loader, self.test_loader = make_data_loader(self.args, **kwargs)
+        self.nclass = self.args.num_classes
+
         # Define network
         model = generate_net(self.args)
         if self.args.ft:
@@ -74,7 +43,6 @@ class Trainer(object):
             train_params = [{'params': model.get_conv_weight_params(), 'lr': self.args.lr,'weight_decay':self.args.weight_decay},
                             {'params': model.get_conv_bias_params(), 'lr': self.args.lr * 2,'weight_decay':0},
                             {'params': model.get_bn_prelu_params(),'lr': self.args.lr,'weight_decay':0}]
-        # train_params = [{'params':model.parameters(),'lr':self.args.lr}]
 
         # Define Optimizer
         if self.args.optim_method == 'sgd':
@@ -87,7 +55,16 @@ class Trainer(object):
 
         # Define Criterion
         # whether to use class balanced weights
-        self.criterion = SegmentationLosses(weight=weight, cuda= not self.args.no_cuda,foreloss_weight=args.foreloss_weight,seloss_weight=args.seloss_weight).build_loss(mode=self.args.loss_type)
+        if self.args.use_balanced_weights:
+            classes_weights_path = os.path.join(self.args.save_dir, self.args.dataset,'classes_weights.npy')
+            if os.path.isfile(classes_weights_path):
+                weight = np.load(classes_weights_path)
+            else:
+                weight = calculate_weigths_labels(self.args.save_dir,self.args.dataset, self.train_loader, self.nclass)
+            weight = torch.from_numpy(weight.astype(np.float32)).type(torch.FloatTensor)
+        else:
+            weight = None
+        self.criterion = SegmentationLosses(weight=weight, cuda=self.args.cuda,foreloss_weight=args.foreloss_weight,seloss_weight=args.seloss_weight).build_loss(mode=self.args.loss_type)
         self.model, self.optimizer = model, optimizer
         
         # Define Evaluator
@@ -96,12 +73,18 @@ class Trainer(object):
         # Define lr scheduler
         self.scheduler = LR_Scheduler(self.args.lr_scheduler, self.args.lr,
                                             self.args.epochs, len(self.train_loader))
-        self.model = self.model.cuda()
-        self.args.start_epoch = 0
+
+        # Using cuda
+        if self.args.cuda:
+            self.model = torch.nn.DataParallel(self.model)
+            patch_replication_callback(self.model)
+            self.model = self.model.cuda()
+
         # Resuming checkpoint
+        self.args.start_epoch = 0
         self.best_pred = 0.0
         if self.args.resume is not None:
-            if not os.path.isfile(self.args.resume) and rank == 0:
+            if not os.path.isfile(self.args.resume):
                 raise RuntimeError("=> no checkpoint found at '{}'" .format(self.args.resume))
             checkpoint = torch.load(self.args.resume)
             self.args.start_epoch = checkpoint['epoch']
@@ -112,110 +95,83 @@ class Trainer(object):
                 else:
                     name = k
                 new_state_dict[name] = v
-            self.model.load_state_dict(new_state_dict,strict=False)
+            if self.args.cuda:
+                self.model.module.load_state_dict(new_state_dict)
+            else:
+                self.model.load_state_dict(new_state_dict)
             if not self.args.ft:
                 self.optimizer.load_state_dict(checkpoint['optimizer'])
             self.best_pred = checkpoint['best_pred']
-            if rank == 0:
-                print("=> loaded checkpoint '{}' (epoch {})"
+            print("=> loaded checkpoint '{}' (epoch {})"
                   .format(self.args.resume, checkpoint['epoch']))
             del checkpoint,new_state_dict,k,v,name
             gc.collect
             torch.cuda.empty_cache()
-        self.model = DistModule(self.model,sync=False)
-
         # Clear start epoch if fine-tuning
-        if rank == 0:
-            print('Starting Epoch:', self.args.start_epoch)
-            print('Total Epoches:', self.args.epochs)
 
     def training(self, epoch):
         train_loss = 0.0
         self.model.train()
         num_img_tr = len(self.train_loader)
         self.evaluator_inner.reset()
-        if self.args.rank == 0:
-            print('Training')
-            start_time = time.time()
+        print('Training')
+        start_time = time.time()
         for i,sample in enumerate(self.train_loader):
             image, target = sample['image'], sample['label']
-            if not self.args.no_cuda:
+            if self.args.cuda:
                 image, target = image.cuda(), target.cuda()
             current_lr = self.scheduler(self.optimizer, i, epoch, self.best_pred)
             self.optimizer.zero_grad()
             output = self.model(image)
             loss,output = self.criterion(output,target)
-            loss = loss/self.args.world_size
             loss.backward()
-            reduce_gradients(self.model,sync=False)
             self.optimizer.step()
-            link.allreduce(loss)
             train_loss += loss.item()
             pred = output.data.cpu().numpy()
             target_array = target.cpu().numpy()
             pred = np.argmax(pred, axis=1)
             self.evaluator_inner.add_batch(target_array,pred)
             if i % 10 == 0:
-                Acc_train = torch.Tensor([self.evaluator_inner.Pixel_Accuracy()])
-                Acc_class_train = torch.Tensor([self.evaluator_inner.Pixel_Accuracy_Class()])
+                Acc_train = self.evaluator_inner.Pixel_Accuracy()
+                Acc_class_train = self.evaluator_inner.Pixel_Accuracy_Class()
                 mIoU_train,IoU_train = self.evaluator_inner.Mean_Intersection_over_Union()
-                mIoU_train = torch.Tensor([mIoU_train])
-                IoU_train = torch.Tensor(IoU_train)
-                FWIoU_train = torch.Tensor([self.evaluator_inner.Frequency_Weighted_Intersection_over_Union()])
-                link.allreduce(IoU_train)
-                link.allreduce(Acc_train)
-                link.allreduce(Acc_class_train)
-                link.allreduce(mIoU_train)
-                link.allreduce(FWIoU_train)
-                IoU_train = IoU_train.numpy()
-                IoU_train = IoU_train/self.args.world_size
-                Acc_train = Acc_train.item()/self.args.world_size
-                Acc_class_train = Acc_class_train.item()/self.args.world_size
-                mIoU_train = mIoU_train.item()/self.args.world_size
-                FWIoU_train = FWIoU_train.item()/self.args.world_size
-                if self.args.rank == 0:
-                    print('\n===>Iteration  %d/%d    learning_rate: %.6f   metric:' % (i,num_img_tr,current_lr))
-                    print('=>Train loss: %.4f    acc: %.4f     m_acc: %.4f     miou: %.4f     fwiou: %.4f' 
-                                % (loss.item(),Acc_train,Acc_class_train,mIoU_train,FWIoU_train))
-                    print("IoU per class: ",IoU_train)
+                FWIoU_train = self.evaluator_inner.Frequency_Weighted_Intersection_over_Union()
+                print('\n===>Iteration  %d/%d    learning_rate: %.6f   metric:' % (i,num_img_tr,current_lr))
+                print('=>Train loss: %.4f    acc: %.4f     m_acc: %.4f     miou: %.4f     fwiou: %.4f' % (loss.item(),
+                                                                                    Acc_train,Acc_class_train,mIoU_train,FWIoU_train))
+                print("IoU per class: ",IoU_train)
                 self.evaluator_inner.reset()
-            if self.args.rank == 0:
-                self.writer.add_scalar('train/total_loss_iter', loss.item(), i + num_img_tr * epoch)
+            
+            self.writer.add_scalar('train/total_loss_iter', loss.item(), i + num_img_tr * epoch)
 
             # Show 10 * 3 inference results each epoch
             if num_img_tr > 10:
                 if i % (num_img_tr // 10) == 0:
                     global_step = i + num_img_tr * epoch
-                    if self.args.rank == 0:
-                        self.summary.visualize_image(self.writer, self.args.dataset, image, target, output, global_step)
+                    self.summary.visualize_image(self.writer, self.args.dataset, image, target, output, global_step)
             else:
                 global_step = i + num_img_tr * epoch
-                if self.args.rank == 0:
-                    self.summary.visualize_image(self.writer, self.args.dataset, image, target, output, global_step)
-        if self.args.rank == 0:
-            stop_time = time.time()
-            print('=====>[Epoch: %d, numImages: %5d   time_consuming: %d]' % 
-            (epoch, num_img_tr * self.args.batch_size*self.args.world_size,stop_time-start_time))
-            self.writer.add_scalar('train/total_loss_epoch', train_loss/(num_img_tr), epoch)
+                self.summary.visualize_image(self.writer, self.args.dataset, image, target, output, global_step)
+        stop_time = time.time()
+        self.writer.add_scalar('train/total_loss_epoch', train_loss/num_img_tr, epoch)
+        print('=====>[Epoch: %d, numImages: %5d   time_consuming: %d]' % 
+        (epoch, num_img_tr * self.args.batch_size,stop_time-start_time))
 
 
     def validation(self, epoch):
         self.model.eval()
         self.evaluator.reset()
         test_loss = 0.0
+        print('\nValidation')
         num_img_tr = len(self.val_loader)
-        if self.args.rank == 0:
-            print('\nValidation')
-            start_time = time.time()
+        start_time = time.time()
         for i, sample in enumerate(self.val_loader):
             image, target = sample['image'], sample['label']
-            if not self.args.no_cuda:
+            if self.args.cuda:
                 image, target = image.cuda(), target.cuda()
             with torch.no_grad():
                 output = self.model(image)
                 loss,output = self.criterion(output, target)
-            loss = loss/self.args.world_size
-            link.allreduce(loss)
             test_loss += loss.item()
             pred = output.data.cpu().numpy()
             target = target.cpu().numpy()
@@ -226,50 +182,35 @@ class Trainer(object):
             # print('test loss: %.3f' % (test_loss / (i + 1)))
         stop_time = time.time()
         # Fast test during the training
-        Acc = torch.Tensor([self.evaluator.Pixel_Accuracy()])
-        Acc_class = torch.Tensor([self.evaluator.Pixel_Accuracy_Class()])
+        Acc = self.evaluator.Pixel_Accuracy()
+        Acc_class = self.evaluator.Pixel_Accuracy_Class()
         mIoU,IoU = self.evaluator.Mean_Intersection_over_Union()
-        mIoU = torch.Tensor([mIoU])
-        IoU = torch.Tensor(IoU)
-        FWIoU = torch.Tensor([self.evaluator.Frequency_Weighted_Intersection_over_Union()])
-        link.allreduce(Acc)
-        link.allreduce(Acc_class)
-        link.allreduce(mIoU)
-        link.allreduce(FWIoU)
-        link.allreduce(IoU)
-        IoU = IoU.numpy()
-        IoU = IoU/self.args.world_size
-        Acc = Acc.item()/self.args.world_size
-        Acc_class = Acc_class.item()/self.args.world_size
-        mIoU = mIoU.item()/self.args.world_size
-        FWIoU = FWIoU.item()/self.args.world_size
-        if self.args.rank == 0:
-            self.writer.add_scalar('val/total_loss_epoch', test_loss/(self.args.world_size*num_img_tr), epoch)
-            self.writer.add_scalar('val/mIoU', mIoU, epoch)
-            self.writer.add_scalar('val/Acc', Acc, epoch)
-            self.writer.add_scalar('val/Acc_class', Acc_class, epoch)
-            self.writer.add_scalar('val/fwIoU', FWIoU, epoch)
-            print('=====>[Epoch: %d, numImages: %5d   previous best=%.4f    time_consuming: %d]' % (epoch, num_img_tr*self.args.world_size,self.best_pred,stop_time-start_time))
-            print("Loss: %.3f  Acc: %.4f,  Acc_class: %.4f,  mIoU: %.4f,  fwIoU: %.4f\n\n" % (test_loss/(num_img_tr),Acc, Acc_class, mIoU, FWIoU))
-            print("IoU per class: ",IoU)
+        FWIoU = self.evaluator.Frequency_Weighted_Intersection_over_Union()
+        self.writer.add_scalar('val/total_loss_epoch', test_loss/num_img_tr, epoch)
+        self.writer.add_scalar('val/mIoU', mIoU, epoch)
+        self.writer.add_scalar('val/Acc', Acc, epoch)
+        self.writer.add_scalar('val/Acc_class', Acc_class, epoch)
+        self.writer.add_scalar('val/fwIoU', FWIoU, epoch)
+        print('=====>[Epoch: %d, numImages: %5d   previous best=%.4f    time_consuming: %d]' % (epoch, num_img_tr * self.args.gpus,self.best_pred,(stop_time-start_time)))
+        print("Loss: %.3f  Acc: %.4f,  Acc_class: %.4f,  mIoU: %.4f,  fwIoU: %.4f\n\n" % (test_loss/(num_img_tr),Acc, Acc_class, mIoU, FWIoU))
+        print("IoU per class: ",IoU)
 
         new_pred = mIoU
-        if self.args.rank == 0:
-            if new_pred > self.best_pred:
-                is_best = True
-                self.best_pred = new_pred
-            else:
-                is_best = False
-            self.saver.save_checkpoint({
-                'epoch': epoch + 1,
-                'state_dict': self.model.state_dict(),
-                'optimizer': self.optimizer.state_dict(),
-                'best_pred': new_pred,
-            }, is_best)
+        if new_pred > self.best_pred:
+            is_best = True
+            self.best_pred = new_pred
+        else:
+            is_best = False
+        self.saver.save_checkpoint({
+            'epoch': epoch + 1,
+            'state_dict': self.model.module.state_dict(),
+            'optimizer': self.optimizer.state_dict(),
+            'best_pred': new_pred,
+        }, is_best)
 
 def main():
-    import argparse
     parser = argparse.ArgumentParser(description="PyTorch vnet Training")
+
     # necessary param about: model,dataset
     parser.add_argument('--backbone',type=str,default=None,help='choose the network') 
     parser.add_argument('--dataset', type=str, default=None,help='dataset name (default: pascal)')
@@ -283,7 +224,7 @@ def main():
     parser.add_argument('--test_size',type=int,default=None)
     parser.add_argument('--shrink',type=int,default=None)
     parser.add_argument('--num_classes',type=int,default=None,help='the number of classes')
-
+    
     # optional train param
     parser.add_argument('--bgr_mode',action='store_true', default=False,help='input image is bgr but rgb')
     parser.add_argument('--normal_mean',type=float, nargs='*',default=[104.008,116.669,122.675])
@@ -303,7 +244,6 @@ def main():
     parser.add_argument('--batch_size', type=int, default=None,
                         metavar='N', help='input batch size for \
                                 training (default: auto)')
-    parser.add_argument('--bn_var_mode',type=str,default='L2')
     parser.add_argument('--use_balanced_weights', action='store_true', default=False,
                         help='whether to use balanced weights (default: False)')
     parser.add_argument('--save_dir',type=str,default=None,help='path to save model')
@@ -337,15 +277,24 @@ def main():
                         help='finetuning on a different dataset')
 
     args = parser.parse_args()
+    args.cuda = not args.no_cuda and torch.cuda.is_available()    
+    args.gpus = torch.cuda.device_count()
+    print("torch.cuda.device_count()=",args.gpus)
+    if args.cuda and args.gpus > 1:
+        args.sync_bn = True
+    else:
+        args.sync_bn = False
     if args.test_size is None:
         args.test_size = args.input_size
     torch.manual_seed(args.seed)
     trainer = Trainer(args)
+    print('Starting Epoch:', trainer.args.start_epoch)
+    print('Total Epoches:', trainer.args.epochs)
     for epoch in range(trainer.args.start_epoch, trainer.args.epochs):
         trainer.training(epoch)
         trainer.validation(epoch)
-    if trainer.args.rank == 0:
-        trainer.writer.close()
+
+    trainer.writer.close()
 
 if __name__ == "__main__":
    main()

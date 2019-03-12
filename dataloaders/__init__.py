@@ -54,7 +54,4 @@ def make_data_loader(args, **kwargs):
     else:
         test_set = None
         test_loader = None
-    if 'rank' in args:
-        return train_set,val_set,test_set
-    else:
-        return train_loader,val_loader,test_loader
+    return train_loader,val_loader,test_loader
