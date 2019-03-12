@@ -68,18 +68,14 @@ class Trainer(object):
         
         # Define network
         model = generate_net(self.args)
-        if self.args.ft:
-            train_params = model.parameters()
-        else:
-            train_params = [{'params': model.get_conv_weight_params(), 'lr': self.args.lr,'weight_decay':self.args.weight_decay},
-                            {'params': model.get_conv_bias_params(), 'lr': self.args.lr * 2,'weight_decay':0},
-                            {'params': model.get_bn_prelu_params(),'lr': self.args.lr,'weight_decay':0}]
+        train_params = [{'params': model.get_conv_weight_params(), 'lr': self.args.lr,'weight_decay':self.args.weight_decay},
+                        {'params': model.get_conv_bias_params(), 'lr': self.args.lr * 2,'weight_decay':0}]
         # train_params = [{'params':model.parameters(),'lr':self.args.lr}]
 
         # Define Optimizer
         if self.args.optim_method == 'sgd':
             optimizer = torch.optim.SGD(train_params, momentum=self.args.momentum, lr=self.args.lr,
-                                    weight_decay=self.args.weight_decay, nesterov=self.args.nesterov)
+                                    weight_decay=0, nesterov=self.args.nesterov)
         elif self.args.optim_method == 'adagrad':
             optimizer = torch.optim.Adagrad(train_params,lr=self.args.lr,weight_decay=self.args.weight_decay)
         else:
