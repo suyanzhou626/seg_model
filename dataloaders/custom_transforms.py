@@ -36,16 +36,19 @@ class ToTensor(object):
     """Convert ndarrays in sample to Tensors."""
 
     def __call__(self, sample):
+        key_list = sample.keys()
+        for key in key_list:
         # swap color axis because
         # numpy image: H x W x C
         # torch image: C X H X W
-        img = sample['image']
-        mask = sample['label']
-        img = img.transpose((2, 0, 1)).copy()
-        mask = mask.copy()
-
-        sample['image'] = torch.from_numpy(img).float()
-        sample['label'] = torch.from_numpy(mask).float()
+            if 'image' in key:
+                img = sample[key]
+                img = img.transpose((2, 0, 1)).copy()
+                sample[key] = torch.from_numpy(img).float()
+            elif 'label' in key:
+                mask = sample[key]
+                mask = mask.copy()
+                sample[key] = torch.from_numpy(mask).float()
 
         return sample
 
@@ -79,7 +82,7 @@ class RandomRotate(object):
         return sample
 
 class Resize(object):
-    def __init__(self,output_size,shrink=16,is_continuous=False):
+    def __init__(self,output_size,shrink=16,is_continuous=False,pad=False):
         assert isinstance(output_size, (int, tuple))
         if isinstance(output_size, int):
             self.output_size = (output_size,output_size)
@@ -87,6 +90,7 @@ class Resize(object):
             self.output_size = output_size
         self.seg_interpolation = cv2.INTER_CUBIC if is_continuous else cv2.INTER_NEAREST
         self.shrink = shrink
+        self.pad = pad
     
     def __call__(self,sample):
         img = sample['image']
@@ -97,10 +101,24 @@ class Resize(object):
         out_h = int(h*scale)
         out_w = ((out_w - 1 + self.shrink -1) // self.shrink) * self.shrink +1
         out_h = ((out_h - 1 + self.shrink -1) // self.shrink) * self.shrink +1
-        img = cv2.resize(img, dsize=(out_w,out_h), interpolation=cv2.INTER_CUBIC)
-        mask = cv2.resize(mask,dsize=(out_w,out_h), interpolation=self.seg_interpolation)
-        sample['image'] = img
-        sample['label'] = mask
+        key_list = sample.keys()
+        for key in key_list:
+            if 'image' in key:
+                img = sample[key]
+                img = cv2.resize(img, dsize=(out_w,out_h), interpolation=cv2.INTER_CUBIC)
+                if self.pad:
+                    new_img = np.zeros((max(out_h,out_w),max(out_h,out_w),3))
+                    new_img[0:out_h,0:out_w] = img
+                    img = new_img
+                sample[key] = img
+            elif 'label' in key:
+                mask = sample[key]
+                mask = cv2.resize(mask,dsize=(out_w,out_h), interpolation=self.seg_interpolation)
+                if self.pad:
+                    new_mask = np.zeros((max(out_h,out_w),max(out_h,out_w)))
+                    new_mask[0:out_h,0:out_w] = mask
+                    mask = new_mask
+                sample[key] = mask
         return sample
 
 class RandomScale(object):

@@ -78,7 +78,7 @@ class GenDataset(Dataset):
 
     def transform_val(self, sample):
         composed_transforms = transforms.Compose([
-            tr.Resize(self.args.test_size,shrink=self.args.shrink),
+            tr.Resize(self.args.test_size,shrink=self.args.shrink,pad=True),
             tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std),
             tr.ToTensor()])
 
