@@ -17,6 +17,17 @@ from utils.metrics import Evaluator
 from utils.distributed_utils import *
 from utils.utils import DistributedSampler,simple_group_split,DistributedGivenIterationSampler
 
+def get_params(model, key):
+	for m in model.named_modules():
+		if key == '1x':
+			if 'backbone' in m[0] and isinstance(m[1], torch.nn.Conv2d):
+				for p in m[1].parameters():
+					yield p
+		elif key == '10x':
+			if 'backbone' not in m[0] and isinstance(m[1], torch.nn.Conv2d):
+				for p in m[1].parameters():
+					yield p
+
 class Trainer(object):
     def __init__(self, args):
         rank, world_size = dist_init()
@@ -70,6 +81,13 @@ class Trainer(object):
         model = generate_net(self.args)
         train_params = [{'params': model.get_conv_weight_params(), 'lr': self.args.lr,'weight_decay':self.args.weight_decay},
                         {'params': model.get_conv_bias_params(), 'lr': self.args.lr * 2,'weight_decay':0}]
+
+        # for fituning the xception deeplab from xception pretrained model
+        if 'deeplab' in self.args.backbone and self.args.ft and self.args.resume is None:
+            train_params = [
+			{'params': get_params(model,key='1x'), 'lr': self.args.lr,'weight_decay':self.args.weight_decay},
+			{'params': get_params(model,key='10x'), 'lr': 10*self.args.lr,'weight_decay':self.args.weight_decay}
+		]
         # train_params = [{'params':model.parameters(),'lr':self.args.lr}]
 
         # Define Optimizer
@@ -152,23 +170,30 @@ class Trainer(object):
             pred = np.argmax(pred, axis=1)
             self.evaluator_inner.add_batch(target_array,pred)
             if i % 10 == 0:
-                Acc_train = torch.Tensor([self.evaluator_inner.Pixel_Accuracy()])
-                Acc_class_train = torch.Tensor([self.evaluator_inner.Pixel_Accuracy_Class()])
+                confusion_matrix = torch.Tensor(self.evaluator_inner.confusion_matrix)
+                link.allreduce(confusion_matrix)
+                self.evaluator_inner.confusion_matrix = confusion_matrix.numpy()
+                Acc_train = self.evaluator_inner.Pixel_Accuracy()
+                Acc_class_train = self.evaluator_inner.Pixel_Accuracy_Class()
                 mIoU_train,IoU_train = self.evaluator_inner.Mean_Intersection_over_Union()
-                mIoU_train = torch.Tensor([mIoU_train])
-                IoU_train = torch.Tensor(IoU_train)
-                FWIoU_train = torch.Tensor([self.evaluator_inner.Frequency_Weighted_Intersection_over_Union()])
-                link.allreduce(IoU_train)
-                link.allreduce(Acc_train)
-                link.allreduce(Acc_class_train)
-                link.allreduce(mIoU_train)
-                link.allreduce(FWIoU_train)
-                IoU_train = IoU_train.numpy()
-                IoU_train = IoU_train/self.args.world_size
-                Acc_train = Acc_train.item()/self.args.world_size
-                Acc_class_train = Acc_class_train.item()/self.args.world_size
-                mIoU_train = mIoU_train.item()/self.args.world_size
-                FWIoU_train = FWIoU_train.item()/self.args.world_size
+                FWIoU_train = self.evaluator_inner.Frequency_Weighted_Intersection_over_Union()
+                # Acc_train = torch.Tensor([self.evaluator_inner.Pixel_Accuracy()])
+                # Acc_class_train = torch.Tensor([self.evaluator_inner.Pixel_Accuracy_Class()])
+                # mIoU_train,IoU_train = self.evaluator_inner.Mean_Intersection_over_Union()
+                # mIoU_train = torch.Tensor([mIoU_train])
+                # IoU_train = torch.Tensor(IoU_train)
+                # FWIoU_train = torch.Tensor([self.evaluator_inner.Frequency_Weighted_Intersection_over_Union()])
+                # link.allreduce(IoU_train)
+                # link.allreduce(Acc_train)
+                # link.allreduce(Acc_class_train)
+                # link.allreduce(mIoU_train)
+                # link.allreduce(FWIoU_train)
+                # IoU_train = IoU_train.numpy()
+                # IoU_train = IoU_train/self.args.world_size
+                # Acc_train = Acc_train.item()/self.args.world_size
+                # Acc_class_train = Acc_class_train.item()/self.args.world_size
+                # mIoU_train = mIoU_train.item()/self.args.world_size
+                # FWIoU_train = FWIoU_train.item()/self.args.world_size
                 if self.args.rank == 0:
                     print('\n===>Iteration  %d/%d    learning_rate: %.6f   metric:' % (i,num_img_tr,current_lr))
                     print('=>Train loss: %.4f    acc: %.4f     m_acc: %.4f     miou: %.4f     fwiou: %.4f' 

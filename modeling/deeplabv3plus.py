@@ -12,6 +12,9 @@ from collections import OrderedDict
 from .nn.xception import Xception
 from .nn.aspp import ASPP
 
+model_urls = {
+    'xception': '/mnt/lustre/wuyao/.torch/models/xception-b5690688.pth'#'http://data.lip6.fr/cadene/pretrainedmodels/xception-b5690688.pth'
+}
 class DeepLabv3plus(nn.Module):
 	def __init__(self, args):
 		super(DeepLabv3plus, self).__init__()
@@ -49,6 +52,8 @@ class DeepLabv3plus(nn.Module):
 				nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
 		self.backbone = Xception(os=16,BatchNorm=BatchNorm)
 		self.backbone_layers = self.backbone.get_layers()
+		if args.ft and args.resume is None:
+			self.load_pretrained_xception()
 
 
 	def forward(self, x):
@@ -88,6 +93,16 @@ class DeepLabv3plus(nn.Module):
 				if m[1].requires_grad:
 					yield m[1]
 
+	def load_pretrained_xception(self):
+		old_dict = torch.load(model_urls['xception'])
+		model_dict = self.backbone.state_dict()
+		old_dict = {k: v for k,v in old_dict.items() if ('itr' not in k and 'tmp' not in k and 'track' not in k)}
+		old_dict.pop('conv3.pointwise.weight')
+		old_dict.pop('conv4.pointwise.weight')
+		model_dict.update(old_dict)
+		self.backbone.load_state_dict(model_dict,strict=False)
+		print('load pretrained xception model!')
+
 if __name__ == "__main__":
     import argparse
     import torch
@@ -95,6 +110,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     args.num_classes = 2
     args.batchnorm_function = torch.nn.BatchNorm2d
+    args.resume = None
+    args.ft = True
     model = DeepLabv3plus(args)
     tempa = []
     tempb = []
