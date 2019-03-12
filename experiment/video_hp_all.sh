@@ -27,4 +27,4 @@ srun --partition=$part --mpi=pmi2 --gres=gpu:1 --ntasks-per-node=1 -n1 --job-nam
 --resume $RESUME \
 --crop_size $CROP_SIZE \
 --shrink $SHRINK \
-2>&1|tee $LOG_DIR/video-vis-$now.log
+# 2>&1|tee $LOG_DIR/video-vis-$now.log

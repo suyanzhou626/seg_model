@@ -152,8 +152,8 @@ class Valuator(object):
         vis_set = VideoDataset(self.args,video_path)
         fourcc = cv2.VideoWriter_fourcc(*'MJPG') #opencv3.0
         save_name = os.path.join(self.args.save_dir,video_path.split('/')[-1].split('.')[0])
-        if not os.path.exists(save_name):
-            os.mkdir(save_name)
+        # if not os.path.exists(save_name):
+        #     os.mkdir(save_name)
         videoWriter = cv2.VideoWriter(save_name + '.avi', fourcc, float(vis_set.framerate), (vis_set.wid,vis_set.hei))
         vis_loader = DataLoader(vis_set, batch_size=self.args.batch_size, shuffle=False,drop_last=False)
         num_img_tr = len(vis_loader)
@@ -186,7 +186,7 @@ class Valuator(object):
             temp = temp.astype(np.uint8)
             if not self.args.bgr_mode:
                 temp = temp[:,:,:,::-1]
-            cv2.imwrite(os.path.join(save_name,str(i)+'.jpg'),temp[0])
+            # cv2.imwrite(os.path.join(save_name,str(i)+'.jpg'),temp[0])
             videoWriter.write(temp[0])
         print('write %d frame' % (i+1))
         videoWriter.release()
