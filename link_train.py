@@ -16,6 +16,7 @@ from utils.summaries import TensorboardSummary
 from utils.metrics import Evaluator
 from utils.distributed_utils import *
 from utils.utils import DistributedSampler,simple_group_split,DistributedGivenIterationSampler
+from utils.load import load_pretrained_mode
 
 def get_params(model, key):
 	for m in model.named_modules():
@@ -115,27 +116,32 @@ class Trainer(object):
         # Resuming checkpoint
         self.best_pred = 0.0
         if self.args.resume is not None:
-            if not os.path.isfile(self.args.resume) and rank == 0:
-                raise RuntimeError("=> no checkpoint found at '{}'" .format(self.args.resume))
-            checkpoint = torch.load(self.args.resume)
-            self.args.start_epoch = checkpoint['epoch']
-            new_state_dict = OrderedDict()
-            for k,v in checkpoint['state_dict'].items():
-                if 'module' in k:
-                    name = k[7:]
-                else:
-                    name = k
-                new_state_dict[name] = v
-            self.model.load_state_dict(new_state_dict,strict=False)
-            if not self.args.ft:
-                self.optimizer.load_state_dict(checkpoint['optimizer'])
-            self.best_pred = checkpoint['best_pred']
-            if rank == 0:
-                print("=> loaded checkpoint '{}' (epoch {})"
-                  .format(self.args.resume, checkpoint['epoch']))
-            del checkpoint,new_state_dict,k,v,name
-            gc.collect
-            torch.cuda.empty_cache()
+            optimizer,start_epoch,best_pred = load_pretrained_mode(self.model,checkpoint_path=self.args.resume)
+            if not self.args.ft and optimizer is not None:
+                self.optimizer.load_state_dict(optimizer)
+            self.best_pred = best_pred
+            self.args.start_epoch = start_epoch
+        #     if not os.path.isfile(self.args.resume) and rank == 0:
+        #         raise RuntimeError("=> no checkpoint found at '{}'" .format(self.args.resume))
+        #     checkpoint = torch.load(self.args.resume)
+        #     self.args.start_epoch = checkpoint['epoch']
+        #     new_state_dict = OrderedDict()
+        #     for k,v in checkpoint['state_dict'].items():
+        #         if 'module' in k:
+        #             name = k[7:]
+        #         else:
+        #             name = k
+        #         new_state_dict[name] = v
+        #     self.model.load_state_dict(new_state_dict,strict=False)
+        #     if not self.args.ft:
+        #         self.optimizer.load_state_dict(checkpoint['optimizer'])
+        #     self.best_pred = checkpoint['best_pred']
+        #     if rank == 0:
+        #         print("=> loaded checkpoint '{}' (epoch {})"
+        #           .format(self.args.resume, checkpoint['epoch']))
+        #     del checkpoint,new_state_dict,k,v,name
+        #     gc.collect
+        #     torch.cuda.empty_cache()
         self.model = DistModule(self.model,sync=False)
 
         # Clear start epoch if fine-tuning

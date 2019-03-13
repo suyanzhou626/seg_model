@@ -5,6 +5,7 @@ import os
 import torch
 from modeling.generatenet import generate_net
 from collections import OrderedDict
+from utils.load import load_pretrained_mode
 
 class ToCaffe(object):
     def __init__(self, args):
@@ -16,23 +17,24 @@ class ToCaffe(object):
         # Define network
         model = generate_net(self.args)
         self.model = model
-
-        # Resuming checkpoint
-        if not os.path.isfile(self.args.resume):
-            raise RuntimeError("=> no checkpoint found at '{}'" .format(self.args.resume))
-        checkpoint = torch.load(self.args.resume)
-        new_state_dict = OrderedDict()
-        for k,v in checkpoint['state_dict'].items():
-            if 'module' in k:
-                name = k[7:]
-            else:
-                name = k
-            new_state_dict[name] = v
         self.model = self.model.cuda()
-        self.model.load_state_dict(new_state_dict)
-        self.model = self.model.cpu()
-        print("=> loaded checkpoint '{}' (epoch {})"
-                .format(self.args.resume, checkpoint['epoch']))
+        # Resuming checkpoint
+        _,_,_ = load_pretrained_mode(self.model,checkpoint_path=self.args.resume)
+        # if not os.path.isfile(self.args.resume):
+        #     raise RuntimeError("=> no checkpoint found at '{}'" .format(self.args.resume))
+        # checkpoint = torch.load(self.args.resume)
+        # new_state_dict = OrderedDict()
+        # for k,v in checkpoint['state_dict'].items():
+        #     if 'module' in k:
+        #         name = k[7:]
+        #     else:
+        #         name = k
+        #     new_state_dict[name] = v
+        # self.model = self.model.cuda()
+        # self.model.load_state_dict(new_state_dict)
+        # self.model = self.model.cpu()
+        # print("=> loaded checkpoint '{}' (epoch {})"
+        #         .format(self.args.resume, checkpoint['epoch']))
 
     def convert(self):
         nart_tools.update_interp=True
@@ -56,7 +58,7 @@ def main():
 
 
     args = parser.parse_args()
-
+    args.ft = False
     # if args.test_batch_size is None:
     #     args.test_batch_size = args.batch_size
     print(args)

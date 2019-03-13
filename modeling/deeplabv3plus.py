@@ -1,16 +1,16 @@
-# ----------------------------------------
-# Written by Yude Wang
-# ----------------------------------------
-
 import numpy as np
 import torch 
 import torch.nn as nn
 import torch.nn.functional as F
 import gc
+import os
+import sys
+sys.path.append(os.getcwd())
 from torch.nn import init
 from collections import OrderedDict
 from .nn.xception import Xception
 from .nn.aspp import ASPP
+from utils.load import load_pretrained_mode
 
 model_urls = {
     'xception': '/mnt/lustre/wuyao/.torch/models/xception-b5690688.pth'#'http://data.lip6.fr/cadene/pretrainedmodels/xception-b5690688.pth'
@@ -63,7 +63,7 @@ class DeepLabv3plus(nn.Module):
 				if m.bias is not None:
 					m.bias.data.zero_()
 		if args.ft and args.resume is None:
-			self.load_pretrained_xception()
+			_ , _ , _ =load_pretrained_mode(self.backbone,checkpoint_path=model_urls['xception'])
 
 
 	def forward(self, x):
@@ -102,16 +102,6 @@ class DeepLabv3plus(nn.Module):
 			if 'bn' in m[0] or 'relu' in m[0]:
 				if m[1].requires_grad:
 					yield m[1]
-
-	def load_pretrained_xception(self):
-		old_dict = torch.load(model_urls['xception'])
-		model_dict = self.backbone.state_dict()
-		# old_dict = {k: v for k,v in old_dict.items() if ('itr' not in k and 'tmp' not in k and 'track' not in k)}
-		for k,v in old_dict.items():
-			if k in model_dict.keys():
-				model_dict[k] = v
-		self.backbone.load_state_dict(model_dict)
-		print('\nload pretrained xception model!\n')
 
 if __name__ == "__main__":
     import argparse

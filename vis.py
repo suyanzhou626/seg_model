@@ -12,6 +12,7 @@ from modeling.sync_batchnorm.replicate import patch_replication_callback
 from dataloaders.utils import decode_seg_map_sequence
 from utils.metrics import Evaluator
 from collections import OrderedDict
+from utils.load import load_pretrained_mode
 class GenDataset(Dataset):
     def __init__(self,args,data_list,split='train'):
         super().__init__()
@@ -93,27 +94,27 @@ class Valuator(object):
 
         # Using cuda
         if self.args.cuda:
-            self.model = torch.nn.DataParallel(self.model)
-            patch_replication_callback(self.model)
             self.model = self.model.cuda()
 
         # Resuming checkpoint
-        if not os.path.isfile(self.args.resume):
-            raise RuntimeError("=> no checkpoint found at '{}'" .format(self.args.resume))
-        checkpoint = torch.load(self.args.resume)
-        new_state_dict = OrderedDict()
-        for k,v in checkpoint['state_dict'].items():
-            if 'module' in k:
-                name = k[7:]
-            else:
-                name = k
-            new_state_dict[name] = v
-        if self.args.cuda:
-            self.model.module.load_state_dict(new_state_dict)
-        else:
-            self.model.load_state_dict(new_state_dict)
-        print("=> loaded checkpoint '{}' (epoch {})"
-                .format(self.args.resume, checkpoint['epoch']))
+        _,_,_ = load_pretrained_mode(self.model,checkpoint_path=self.args.resume)
+        # if not os.path.isfile(self.args.resume):
+        #     raise RuntimeError("=> no checkpoint found at '{}'" .format(self.args.resume))
+        # checkpoint = torch.load(self.args.resume)
+        # new_state_dict = OrderedDict()
+        # for k,v in checkpoint['state_dict'].items():
+        #     if 'module' in k:
+        #         name = k[7:]
+        #     else:
+        #         name = k
+        #     new_state_dict[name] = v
+        # if self.args.cuda:
+        #     self.model.module.load_state_dict(new_state_dict)
+        # else:
+        #     self.model.load_state_dict(new_state_dict)
+        # print("=> loaded checkpoint '{}' (epoch {})"
+        #         .format(self.args.resume, checkpoint['epoch']))
+        
 
     def visual(self):
         self.model.eval()
@@ -234,6 +235,7 @@ def main():
 
 
     args = parser.parse_args()
+    args.ft = False
     args.cuda = not args.no_cuda and torch.cuda.is_available()    
     print(args)
     valuator = Valuator(args)

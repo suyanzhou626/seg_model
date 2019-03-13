@@ -11,6 +11,7 @@ from modeling.generatenet import generate_net
 from dataloaders.utils import decode_seg_map_sequence
 from utils.metrics import Evaluator
 from collections import OrderedDict
+from utils.load import load_pretrained_mode
 class Normalize(object):
     """Normalize a tensor image with mean and standard deviation.
     Args:
@@ -129,19 +130,20 @@ class Valuator(object):
             self.model = self.model.cuda()
 
         # Resuming checkpoint
-        if not os.path.isfile(self.args.resume):
-            raise RuntimeError("=> no checkpoint found at '{}'" .format(self.args.resume))
-        checkpoint = torch.load(self.args.resume)
-        new_state_dict = OrderedDict()
-        for k,v in checkpoint['state_dict'].items():
-            if 'module' in k:
-                name = k[7:]
-            else:
-                name = k
-            new_state_dict[name] = v
-        self.model.load_state_dict(new_state_dict)
-        print("=> loaded checkpoint '{}' (epoch {})"
-                .format(self.args.resume, checkpoint['epoch']))
+        _,_,_ = load_pretrained_mode(self.model,checkpoint_path=self.args.resume)
+        # if not os.path.isfile(self.args.resume):
+        #     raise RuntimeError("=> no checkpoint found at '{}'" .format(self.args.resume))
+        # checkpoint = torch.load(self.args.resume)
+        # new_state_dict = OrderedDict()
+        # for k,v in checkpoint['state_dict'].items():
+        #     if 'module' in k:
+        #         name = k[7:]
+        #     else:
+        #         name = k
+        #     new_state_dict[name] = v
+        # self.model.load_state_dict(new_state_dict)
+        # print("=> loaded checkpoint '{}' (epoch {})"
+        #         .format(self.args.resume, checkpoint['epoch']))
     
 
 
@@ -222,6 +224,7 @@ def main():
 
     args = parser.parse_args()
     args.batch_size = 1
+    args.ft = False
     args.cuda = not args.no_cuda and torch.cuda.is_available()    
     args.gpus = torch.cuda.device_count()
     print("torch.cuda.device_count()=",args.gpus)
