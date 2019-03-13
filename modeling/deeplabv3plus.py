@@ -47,11 +47,21 @@ class DeepLabv3plus(nn.Module):
 				nn.Dropout(0.1),
 		)
 		self.cls_conv = nn.Conv2d(256, args.num_classes, 1, 1, padding=0)
-		for m in self.modules():
-			if isinstance(m, nn.Conv2d):
-				nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+		# for m in self.modules():
+		# 	if isinstance(m, nn.Conv2d):
+		# 		nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
 		self.backbone = Xception(os=16,BatchNorm=BatchNorm)
 		self.backbone_layers = self.backbone.get_layers()
+		for m in self.modules():
+			classname = m.__class__.__name__
+			if isinstance(m, nn.Conv2d):
+				nn.init.kaiming_normal_(m.weight)
+				if m.bias is not None:
+					m.bias.data.zero_()
+			elif classname.find('BatchNorm') != -1:
+				m.weight.data.fill_(1)
+				if m.bias is not None:
+					m.bias.data.zero_()
 		if args.ft and args.resume is None:
 			self.load_pretrained_xception()
 
@@ -96,12 +106,12 @@ class DeepLabv3plus(nn.Module):
 	def load_pretrained_xception(self):
 		old_dict = torch.load(model_urls['xception'])
 		model_dict = self.backbone.state_dict()
-		old_dict = {k: v for k,v in old_dict.items() if ('itr' not in k and 'tmp' not in k and 'track' not in k)}
-		old_dict.pop('conv3.pointwise.weight')
-		old_dict.pop('conv4.pointwise.weight')
-		model_dict.update(old_dict)
-		self.backbone.load_state_dict(model_dict,strict=False)
-		print('load pretrained xception model!')
+		# old_dict = {k: v for k,v in old_dict.items() if ('itr' not in k and 'tmp' not in k and 'track' not in k)}
+		for k,v in old_dict.items():
+			if k in model_dict.keys():
+				model_dict[k] = v
+		self.backbone.load_state_dict(model_dict)
+		print('\nload pretrained xception model!\n')
 
 if __name__ == "__main__":
     import argparse
