@@ -290,6 +290,7 @@ def main():
 
 
     args = parser.parse_args()
+    args.ft = False
     args.cuda = not args.no_cuda and torch.cuda.is_available()    
     args.gpus = torch.cuda.device_count()
     print("torch.cuda.device_count()=",args.gpus)

@@ -15,6 +15,7 @@ from utils.summaries import TensorboardSummary
 from utils.metrics import Evaluator
 from modeling.sync_batchnorm.replicate import patch_replication_callback
 from modeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
+from utils.load import load_pretrained_mode
 
 class Trainer(object):
     def __init__(self, args):
@@ -69,41 +70,48 @@ class Trainer(object):
         # Define lr scheduler
         self.scheduler = LR_Scheduler(self.args.lr_scheduler, self.args.lr,
                                             self.args.epochs, len(self.train_loader))
+                            
+        
+        self.model = self.model.cuda()
+        # Resuming checkpoint
+        self.args.start_epoch = 0
+        self.best_pred = 0.0
+        if self.args.resume is not None:
+            optimizer,start_epoch,best_pred = load_pretrained_mode(self.model,checkpoint_path=self.args.resume)
+            if not self.args.ft and optimizer is not None:
+                self.optimizer.load_state_dict(optimizer)
+            self.best_pred = best_pred
+            self.args.start_epoch = start_epoch
+        #     if not os.path.isfile(self.args.resume):
+        #         raise RuntimeError("=> no checkpoint found at '{}'" .format(self.args.resume))
+        #     checkpoint = torch.load(self.args.resume)
+        #     self.args.start_epoch = checkpoint['epoch']
+        #     new_state_dict = OrderedDict()
+        #     for k,v in checkpoint['state_dict'].items():
+        #         if 'module' in k:
+        #             name = k[7:]
+        #         else:
+        #             name = k
+        #         new_state_dict[name] = v
+        #     if self.args.cuda:
+        #         self.model.module.load_state_dict(new_state_dict)
+        #     else:
+        #         self.model.load_state_dict(new_state_dict)
+        #     if not self.args.ft:
+        #         self.optimizer.load_state_dict(checkpoint['optimizer'])
+        #     self.best_pred = checkpoint['best_pred']
+        #     print("=> loaded checkpoint '{}' (epoch {})"
+        #           .format(self.args.resume, checkpoint['epoch']))
+        #     del checkpoint,new_state_dict,k,v,name
+        #     gc.collect
+        #     torch.cuda.empty_cache()
+        # Clear start epoch if fine-tuning
 
         # Using cuda
         if self.args.cuda:
             self.model = torch.nn.DataParallel(self.model)
             patch_replication_callback(self.model)
             self.model = self.model.cuda()
-
-        # Resuming checkpoint
-        self.args.start_epoch = 0
-        self.best_pred = 0.0
-        if self.args.resume is not None:
-            if not os.path.isfile(self.args.resume):
-                raise RuntimeError("=> no checkpoint found at '{}'" .format(self.args.resume))
-            checkpoint = torch.load(self.args.resume)
-            self.args.start_epoch = checkpoint['epoch']
-            new_state_dict = OrderedDict()
-            for k,v in checkpoint['state_dict'].items():
-                if 'module' in k:
-                    name = k[7:]
-                else:
-                    name = k
-                new_state_dict[name] = v
-            if self.args.cuda:
-                self.model.module.load_state_dict(new_state_dict)
-            else:
-                self.model.load_state_dict(new_state_dict)
-            if not self.args.ft:
-                self.optimizer.load_state_dict(checkpoint['optimizer'])
-            self.best_pred = checkpoint['best_pred']
-            print("=> loaded checkpoint '{}' (epoch {})"
-                  .format(self.args.resume, checkpoint['epoch']))
-            del checkpoint,new_state_dict,k,v,name
-            gc.collect
-            torch.cuda.empty_cache()
-        # Clear start epoch if fine-tuning
 
     def training(self, epoch):
         train_loss = 0.0
