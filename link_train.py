@@ -119,8 +119,8 @@ class Trainer(object):
             optimizer,start_epoch,best_pred = load_pretrained_mode(self.model,checkpoint_path=self.args.resume)
             if not self.args.ft and optimizer is not None:
                 self.optimizer.load_state_dict(optimizer)
+                self.args.start_epoch = start_epoch
             self.best_pred = best_pred
-            self.args.start_epoch = start_epoch
         #     if not os.path.isfile(self.args.resume) and rank == 0:
         #         raise RuntimeError("=> no checkpoint found at '{}'" .format(self.args.resume))
         #     checkpoint = torch.load(self.args.resume)
