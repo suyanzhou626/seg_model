@@ -94,11 +94,11 @@ class VnetMloss(nn.Module):
         x = self.deconvbblock3(x,branch2)
         x = self.deconvbblock4(x,branch1)
         y = self.semantic_conv(x)
-        y = torch.argmax(y,dim=1,keepdim=True).type_as(x)
-        x *= y
+        temp_y = torch.argmax(y.detach(),dim=1,keepdim=True).type_as(x)
+        x = x * temp_y
         x = self.last_conv(x)
         x = torch.nn.functional.interpolate(x,size=input.size()[2:],mode='bilinear',align_corners=True)
-        return x
+        return (x,y)
 
     def get_conv_weight_params(self):
         for m in self.named_modules():
