@@ -13,6 +13,7 @@ from dataloaders.utils import decode_seg_map_sequence
 from utils.metrics import Evaluator
 from collections import OrderedDict
 from utils.load import load_pretrained_mode
+from utils.loss import SegmentationLosses
 class GenDataset(Dataset):
     def __init__(self,args,data_list,split='train'):
         super().__init__()
@@ -91,7 +92,7 @@ class Valuator(object):
 
         self.model = model
         self.evaluator = Evaluator(self.nclass)
-
+        self.criterion = SegmentationLosses(cuda=True).build_loss(mode='ce')
         # Using cuda
         if self.args.cuda:
             self.model = self.model.cuda()
@@ -125,19 +126,16 @@ class Valuator(object):
         vis_set = GenDataset(self.args,data_list,split='vis')
         vis_loader = DataLoader(vis_set, batch_size=self.args.batch_size, shuffle=False)
         num_img_tr = len(vis_loader)
+        test_loss = 0
         print('=====>[numImages: %5d]' % (num_img_tr * self.args.batch_size))
         for i, sample in enumerate(vis_loader):
             image, target ,name, ori = sample['image'], sample['label'], sample['name'], sample['ori']
             if self.args.cuda:
                 image, target = image.cuda(), target.cuda()
             with torch.no_grad():
-                if self.args.backbone == 'dbl':
-                    _,output = self.model(image)
-                elif self.args.backbone == 'msc':
-                    output = self.model(image)[0]
-                else:
-                    output = self.model(image)
-            output = torch.nn.functional.interpolate(output,size=target.size()[1:],mode='bilinear',align_corners=True)
+                output = self.model(image)
+                loss,output = self.criterion(output, target)
+            test_loss += loss.item()
             pred = output.data.cpu().numpy()
             target = target.cpu().numpy()
             # image = image.cpu().numpy()
@@ -158,7 +156,7 @@ class Valuator(object):
         Acc_class = self.evaluator.Pixel_Accuracy_Class()
         mIoU,IoU = self.evaluator.Mean_Intersection_over_Union()
         FWIoU = self.evaluator.Frequency_Weighted_Intersection_over_Union()
-        print("Acc:{}, Acc_class:{}, mIoU:{}, fwIoU: {}".format(Acc, Acc_class, mIoU, FWIoU))
+        print("Loss:{} , Acc:{}, Acc_class:{}, mIoU:{}, fwIoU: {}".format(test_loss/num_img_tr,Acc, Acc_class, mIoU, FWIoU))
         print("IoU per class: ",IoU)
 
     def save_img(self,images,labels,predictions,names):

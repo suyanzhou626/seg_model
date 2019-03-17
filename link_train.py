@@ -121,27 +121,6 @@ class Trainer(object):
                 self.optimizer.load_state_dict(optimizer)
                 self.args.start_epoch = start_epoch
             self.best_pred = best_pred
-        #     if not os.path.isfile(self.args.resume) and rank == 0:
-        #         raise RuntimeError("=> no checkpoint found at '{}'" .format(self.args.resume))
-        #     checkpoint = torch.load(self.args.resume)
-        #     self.args.start_epoch = checkpoint['epoch']
-        #     new_state_dict = OrderedDict()
-        #     for k,v in checkpoint['state_dict'].items():
-        #         if 'module' in k:
-        #             name = k[7:]
-        #         else:
-        #             name = k
-        #         new_state_dict[name] = v
-        #     self.model.load_state_dict(new_state_dict,strict=False)
-        #     if not self.args.ft:
-        #         self.optimizer.load_state_dict(checkpoint['optimizer'])
-        #     self.best_pred = checkpoint['best_pred']
-        #     if rank == 0:
-        #         print("=> loaded checkpoint '{}' (epoch {})"
-        #           .format(self.args.resume, checkpoint['epoch']))
-        #     del checkpoint,new_state_dict,k,v,name
-        #     gc.collect
-        #     torch.cuda.empty_cache()
         self.model = DistModule(self.model,sync=False)
 
         # Clear start epoch if fine-tuning
@@ -153,6 +132,7 @@ class Trainer(object):
         train_loss = 0.0
         self.model.train()
         num_img_tr = len(self.train_loader)
+        self.evaluator.reset()
         self.evaluator_inner.reset()
         if self.args.rank == 0:
             print('Training')
@@ -175,31 +155,15 @@ class Trainer(object):
             target_array = target.cpu().numpy()
             pred = np.argmax(pred, axis=1)
             self.evaluator_inner.add_batch(target_array,pred)
+            self.evaluator.add_batch(target_array,pred)
             if i % 10 == 0:
-                confusion_matrix = torch.Tensor(self.evaluator_inner.confusion_matrix)
-                link.allreduce(confusion_matrix)
-                self.evaluator_inner.confusion_matrix = confusion_matrix.numpy()
+                confusion_matrix_iter = torch.Tensor(self.evaluator_inner.confusion_matrix)
+                link.allreduce(confusion_matrix_iter)
+                self.evaluator_inner.confusion_matrix = confusion_matrix_iter.numpy()
                 Acc_train = self.evaluator_inner.Pixel_Accuracy()
                 Acc_class_train = self.evaluator_inner.Pixel_Accuracy_Class()
                 mIoU_train,IoU_train = self.evaluator_inner.Mean_Intersection_over_Union()
                 FWIoU_train = self.evaluator_inner.Frequency_Weighted_Intersection_over_Union()
-                # Acc_train = torch.Tensor([self.evaluator_inner.Pixel_Accuracy()])
-                # Acc_class_train = torch.Tensor([self.evaluator_inner.Pixel_Accuracy_Class()])
-                # mIoU_train,IoU_train = self.evaluator_inner.Mean_Intersection_over_Union()
-                # mIoU_train = torch.Tensor([mIoU_train])
-                # IoU_train = torch.Tensor(IoU_train)
-                # FWIoU_train = torch.Tensor([self.evaluator_inner.Frequency_Weighted_Intersection_over_Union()])
-                # link.allreduce(IoU_train)
-                # link.allreduce(Acc_train)
-                # link.allreduce(Acc_class_train)
-                # link.allreduce(mIoU_train)
-                # link.allreduce(FWIoU_train)
-                # IoU_train = IoU_train.numpy()
-                # IoU_train = IoU_train/self.args.world_size
-                # Acc_train = Acc_train.item()/self.args.world_size
-                # Acc_class_train = Acc_class_train.item()/self.args.world_size
-                # mIoU_train = mIoU_train.item()/self.args.world_size
-                # FWIoU_train = FWIoU_train.item()/self.args.world_size
                 if self.args.rank == 0:
                     print('\n===>Iteration  %d/%d    learning_rate: %.6f   metric:' % (i,num_img_tr,current_lr))
                     print('=>Train loss: %.4f    acc: %.4f     m_acc: %.4f     miou: %.4f     fwiou: %.4f' 
@@ -219,10 +183,20 @@ class Trainer(object):
                 global_step = i + num_img_tr * epoch
                 if self.args.rank == 0:
                     self.summary.visualize_image(self.writer, self.args.dataset, image, target, output, global_step)
+        confusion_matrix_epoch = torch.Tensor(self.evaluator.confusion_matrix)
+        link.allreduce(confusion_matrix_epoch)
+        self.evaluator.confusion_matrix = confusion_matrix_epoch.numpy()
+        Acc_train_epoch = self.evaluator.Pixel_Accuracy()
+        Acc_class_train_epoch = self.evaluator.Pixel_Accuracy_Class()
+        mIoU_train_epoch,IoU_train_epoch = self.evaluator.Mean_Intersection_over_Union()
+        FWIoU_train_epoch = self.evaluator.Frequency_Weighted_Intersection_over_Union()
         if self.args.rank == 0:
             stop_time = time.time()
             print('=====>[Epoch: %d, numImages: %5d   time_consuming: %d]' % 
             (epoch, num_img_tr * self.args.batch_size*self.args.world_size,stop_time-start_time))
+            print("Loss: %.3f  Acc: %.4f,  Acc_class: %.4f,  mIoU: %.4f,  fwIoU: %.4f\n\n" % (train_loss/(num_img_tr),
+                Acc_train_epoch, Acc_class_train_epoch, mIoU_train_epoch, FWIoU_train_epoch))
+            print("IoU per class: ",IoU_train_epoch)
             self.writer.add_scalar('train/total_loss_epoch', train_loss/(num_img_tr), epoch)
 
 
@@ -253,25 +227,15 @@ class Trainer(object):
             # print('test loss: %.3f' % (test_loss / (i + 1)))
         stop_time = time.time()
         # Fast test during the training
-        Acc = torch.Tensor([self.evaluator.Pixel_Accuracy()])
-        Acc_class = torch.Tensor([self.evaluator.Pixel_Accuracy_Class()])
+        confusion_matrix_val = torch.Tensor(self.evaluator.confusion_matrix)
+        link.allreduce(confusion_matrix_val)
+        self.evaluator.confusion_matrix = confusion_matrix_val.numpy()
+        Acc = self.evaluator.Pixel_Accuracy()
+        Acc_class = self.evaluator.Pixel_Accuracy_Class()
         mIoU,IoU = self.evaluator.Mean_Intersection_over_Union()
-        mIoU = torch.Tensor([mIoU])
-        IoU = torch.Tensor(IoU)
-        FWIoU = torch.Tensor([self.evaluator.Frequency_Weighted_Intersection_over_Union()])
-        link.allreduce(Acc)
-        link.allreduce(Acc_class)
-        link.allreduce(mIoU)
-        link.allreduce(FWIoU)
-        link.allreduce(IoU)
-        IoU = IoU.numpy()
-        IoU = IoU/self.args.world_size
-        Acc = Acc.item()/self.args.world_size
-        Acc_class = Acc_class.item()/self.args.world_size
-        mIoU = mIoU.item()/self.args.world_size
-        FWIoU = FWIoU.item()/self.args.world_size
+        FWIoU = self.evaluator.Frequency_Weighted_Intersection_over_Union()
         if self.args.rank == 0:
-            self.writer.add_scalar('val/total_loss_epoch', test_loss/(self.args.world_size*num_img_tr), epoch)
+            self.writer.add_scalar('val/total_loss_epoch', test_loss/(num_img_tr), epoch)
             self.writer.add_scalar('val/mIoU', mIoU, epoch)
             self.writer.add_scalar('val/Acc', Acc, epoch)
             self.writer.add_scalar('val/Acc_class', Acc_class, epoch)
