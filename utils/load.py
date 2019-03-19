@@ -18,8 +18,17 @@ def load_pretrained_mode(model,checkpoint_path=None):
         state_dict = {k.replace('module.',''): v for k,v in state_dict.items()}
     else:
         state_dict = {k.replace('module.',''): v for k,v in checkpoint.items()}
-
+    model_params = len(model_state.keys())
+    checkpoint_params = len(state_dict.keys())
+    print('this model has {} params; this checkpoint has {} params'.format(model_params,checkpoint_params))
+    if model_params > checkpoint_params:
+        for i in model_state.keys():
+            if i not in state_dict.keys():
+                print('this param of the model dont in the checkpoint: {}'.format(i))
+    num = 0
+    total = 0
     for k,v in state_dict.items():
+        total += 1
         if k in model_state.keys():
             right_flag = True
             if (len(v.size()) != len(model_state[k].size())):
@@ -30,6 +39,9 @@ def load_pretrained_mode(model,checkpoint_path=None):
                     break
             if right_flag:
                 model_state[k] = v
+                num += 1
+        else:
+            print('this param of the checkpoint dont in the model:{}'.format(k))
     model.load_state_dict(model_state)
-    print('success for loading pretrained model params from {}! (epoch: {})'.format(checkpoint_path,str(start_epoch)))
+    print('success for loading pretrained model params {}/{} from {}! (epoch: {})'.format(str(num),str(total),checkpoint_path,str(start_epoch)))
     return optimizer,start_epoch,best_pred
