@@ -6,10 +6,11 @@ from torchvision import transforms
 import io
 from PIL import Image
 import os
+import cv2
 
 import linklink as link
 
-def pil_loader(img_str,bgr_mode=False):
+def pil_loader(img_str,bgr_mode=False,gray_mode=False):
     buff = io.BytesIO(img_str)
     
     img = Image.open(buff)
@@ -17,6 +18,10 @@ def pil_loader(img_str,bgr_mode=False):
     img = np.array(img).astype(dtype=np.float32)
     if bgr_mode:
         img = img[:,:,::-1]  #convert to BGR
+    elif gray_mode:
+        img = img[:,:,::-1]
+        img = cv2.cvtColor(img,cv2.COLOR_RGB2GRAY)
+        img = np.dstack([img,img,img])
     return img
 
 def pil_loader_label(img_str,bgr_mode=False):
@@ -71,7 +76,7 @@ class McDataset(Dataset):
         self.mclient.Get(label_filename, label_value)
         image_value_str = mc.ConvertBuffer(image_value)
         label_value_str = mc.ConvertBuffer(label_value)
-        img = pil_loader(image_value_str,bgr_mode=self.args.bgr_mode)
+        img = pil_loader(image_value_str,bgr_mode=self.args.bgr_mode,gray_mode=self.args.gray_mode)
         label = pil_loader_label(label_value_str,bgr_mode=self.args.bgr_mode)
         sample = {'image':img,'label':label}
         if self.split == 'train':

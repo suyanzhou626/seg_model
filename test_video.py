@@ -40,22 +40,6 @@ class Resize(object):
         out_w = ((out_w - 1 + self.shrink -1) // self.shrink) * self.shrink +1
         out_h = ((out_h - 1 + self.shrink -1) // self.shrink) * self.shrink +1
         img = img.resize((out_w,out_h),Image.BILINEAR)
-        # if h < w:
-        #     ow = self.size
-        #     oh = int(1.0 * h * ow / w)
-        # else:
-        #     oh = self.size
-        #     ow = int(1.0 * w * oh / h)
-        # pad_img_b = np.zeros((self.size,self.size))
-        # pad_img_b.fill(self.value[0])
-        # pad_img_g = np.zeros((self.size,self.size))
-        # pad_img_g.fill(self.value[1])
-        # pad_img_r = np.zeros((self.size,self.size))
-        # pad_img_r.fill(self.value[2])
-        # pad_img = np.stack([pad_img_b,pad_img_g,pad_img_r],axis=-1)
-        # img = img.resize((ow, oh), Image.BILINEAR)
-        # img = np.array(img).astype(dtype=np.float32)
-        # pad_img[:oh,:ow,:] = img
 
         return {'image': img,
                 'ow':w,'oh':h}
@@ -105,7 +89,7 @@ class VideoDataset(Dataset):
         return sample
 
     def transform_val(self, sample):
-        pre_trans = Resize(self.args.crop_size)
+        pre_trans = Resize(self.args.test_size)
         temp = pre_trans(sample)
         composed_transforms = transforms.Compose([
             Normalize(mean=self.args.normal_mean,std=self.args.normal_std),
@@ -131,19 +115,6 @@ class Valuator(object):
 
         # Resuming checkpoint
         _,_,_ = load_pretrained_mode(self.model,checkpoint_path=self.args.resume)
-        # if not os.path.isfile(self.args.resume):
-        #     raise RuntimeError("=> no checkpoint found at '{}'" .format(self.args.resume))
-        # checkpoint = torch.load(self.args.resume)
-        # new_state_dict = OrderedDict()
-        # for k,v in checkpoint['state_dict'].items():
-        #     if 'module' in k:
-        #         name = k[7:]
-        #     else:
-        #         name = k
-        #     new_state_dict[name] = v
-        # self.model.load_state_dict(new_state_dict)
-        # print("=> loaded checkpoint '{}' (epoch {})"
-        #         .format(self.args.resume, checkpoint['epoch']))
     
 
 
@@ -164,12 +135,9 @@ class Valuator(object):
             image, ori, ow,oh = sample['input'],sample['ori'],sample['ow'], sample['oh']
             image = image.cuda()
             with torch.no_grad():
-                if self.args.backbone == 'dbl':
-                    _,output = self.model(image)
-                elif self.args.backbone == 'msc':
-                    output = self.model(image)[0]
-                else:
-                    output = self.model(image)
+                output = self.model(image)
+                if isinstance(output,(tuple,list)):
+                    output = output[0]
             output = torch.nn.functional.interpolate(output,size=ori.size()[1:3],mode='bilinear',align_corners=True)
             pred = output.data.cpu().numpy()
             ori = ori.cpu().numpy()
@@ -201,35 +169,13 @@ class Valuator(object):
         return img_add
 
 def main():
-    parser = argparse.ArgumentParser(description="PyTorch vnet Training")
-    parser.add_argument('--backbone',type=str,default=None,help='choose the network') 
-    parser.add_argument('--test_path',type=str,default=None,help='path to val.txt')
-    parser.add_argument('--num_classes',type=int,default=None,help='the number of classes')
-    parser.add_argument('--crop_size', type=int, default=None,
-                        help='crop image size')
-    parser.add_argument('--shrink',type=int,default=None)
-    parser.add_argument('--normal_mean',type=float, nargs='*',default=[104.008,116.669,122.675])
-    parser.add_argument('--normal_std',type=float,default=1.0)
-    # training hyper params
-    parser.add_argument('--bgr_mode',action='store_true', default=False,help='input image is bgr but rgb')
-    parser.add_argument('--save_dir',type=str,default=None,help='path to save model')
-
-    # cuda, seed and logging
-    parser.add_argument('--no_cuda', action='store_true', default=
-                        False, help='disables CUDA training')
-    # checking point
-    parser.add_argument('--resume', type=str, default=None,
-                        help='put the path to resuming file if needed')
-
-
-    args = parser.parse_args()
+    from .utils import parse_args
+    args = parse_args.parse()
     args.batch_size = 1
     args.ft = False
     args.cuda = not args.no_cuda and torch.cuda.is_available()    
     args.gpus = torch.cuda.device_count()
     print("torch.cuda.device_count()=",args.gpus)
-    # if args.test_batch_size is None:
-    #     args.test_batch_size = args.batch_size
     print(args)
     valuator = Valuator(args)
     video_paths = os.listdir(args.test_path)

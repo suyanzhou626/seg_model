@@ -20,21 +20,6 @@ class ToCaffe(object):
         self.model = self.model.cuda()
         # Resuming checkpoint
         _,_,_ = load_pretrained_mode(self.model,checkpoint_path=self.args.resume)
-        # if not os.path.isfile(self.args.resume):
-        #     raise RuntimeError("=> no checkpoint found at '{}'" .format(self.args.resume))
-        # checkpoint = torch.load(self.args.resume)
-        # new_state_dict = OrderedDict()
-        # for k,v in checkpoint['state_dict'].items():
-        #     if 'module' in k:
-        #         name = k[7:]
-        #     else:
-        #         name = k
-        #     new_state_dict[name] = v
-        # self.model = self.model.cuda()
-        # self.model.load_state_dict(new_state_dict)
-        # self.model = self.model.cpu()
-        # print("=> loaded checkpoint '{}' (epoch {})"
-        #         .format(self.args.resume, checkpoint['epoch']))
 
     def convert(self):
         nart_tools.update_interp=True
@@ -42,25 +27,8 @@ class ToCaffe(object):
             pytorch.convert(self.model,[self.args.input_shape],self.args.out_name,input_names=["data"],output_names=["out"])
 
 def main():
-    parser = argparse.ArgumentParser(description="PyTorch vnet Training")
-
-    parser.add_argument('--backbone',type=str,default=None,help='choose the network') 
-
-    parser.add_argument('--num_classes',type=int,default=None,help='the number of classes')
-    parser.add_argument('--input_shape', type=int, nargs='*',default=(3,225,225),
-                        help='input image size')
-
-    parser.add_argument('--save_dir',type=str,default=None,help='path to save model')
-
-    # checking point
-    parser.add_argument('--resume', type=str, default=None,
-                        help='put the path to resuming file if needed')
-
-
-    args = parser.parse_args()
-    args.ft = False
-    # if args.test_batch_size is None:
-    #     args.test_batch_size = args.batch_size
+    from .utils import parse_args
+    args = parse_args.parse()
     print(args)
     tocaffe = ToCaffe(args)
     tocaffe.convert()

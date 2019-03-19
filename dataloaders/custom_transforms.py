@@ -154,6 +154,7 @@ class RandomCrop(object):
         new_h, new_w = self.crop_size
         new_img = np.zeros((new_h,new_w,3),dtype=np.float)
         new_mask = np.zeros((new_h,new_w),dtype=np.float)
+        new_mask.fill(255)
         padw = max(0,w-new_w)
         padh = max(0,h-new_h)
         w_begin = random.randint(0,padw)
