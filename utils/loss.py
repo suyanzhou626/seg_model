@@ -37,7 +37,7 @@ class SegmentationLosses(object):
                                             reduction='elementwise_mean' if self.size_average else 'sum')
         if self.cuda:
             criterion = criterion.cuda()
-        if not isinstance(logit,list):
+        if not isinstance(logit,(list,tuple)):
             # n, c,h,w = logit.size()
             logit = nn.functional.interpolate(logit,size=target.data.size()[1:],mode='bilinear',align_corners=True)
             loss = criterion(logit, target.long())
@@ -50,7 +50,7 @@ class SegmentationLosses(object):
             target2 = nn.functional.interpolate(target2,size=pred2.data.size()[2:],mode='bilinear',align_corners=True)
             target2 = torch.squeeze(target2,1).long()
             target2[target2>1] = 1
-            loss1 = criterion(pred1,target)
+            loss1 = criterion(pred1,target.long())
             loss2 = criterion(pred2,target2)
             loss = loss1 + self.loss_weight1*loss2
             return loss,pred1

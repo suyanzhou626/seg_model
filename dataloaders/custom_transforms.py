@@ -115,6 +115,7 @@ class Resize(object):
                     mask = sample[key]
                     mask = cv2.resize(mask,dsize=(out_w,out_h), interpolation=self.seg_interpolation)
                     new_mask = np.zeros((max(out_h,out_w),max(out_h,out_w)))
+                    new_mask.fill(255)
                     new_mask[0:out_h,0:out_w] = mask
                     mask = new_mask
                     sample[key] = mask
@@ -154,6 +155,7 @@ class RandomCrop(object):
         new_h, new_w = self.crop_size
         new_img = np.zeros((new_h,new_w,3),dtype=np.float)
         new_mask = np.zeros((new_h,new_w),dtype=np.float)
+        new_mask.fill(255)
         padw = max(0,w-new_w)
         padh = max(0,h-new_h)
         w_begin = random.randint(0,padw)

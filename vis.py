@@ -13,6 +13,7 @@ from dataloaders.utils import decode_seg_map_sequence
 from utils.metrics import Evaluator
 from collections import OrderedDict
 from utils.load import load_pretrained_mode
+from utils.loss import SegmentationLosses
 class GenDataset(Dataset):
     def __init__(self,args,data_list,split='train'):
         super().__init__()
@@ -68,7 +69,7 @@ class GenDataset(Dataset):
 
     def transform_vis(self,sample):
         composed_transforms = transforms.Compose([
-            tr.Resize(self.args.crop_size,shrink=self.args.shrink),
+            tr.Resize(self.args.test_size,shrink=self.args.shrink),
             tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std),
             tr.ToTensor()
         ])
@@ -91,29 +92,13 @@ class Valuator(object):
 
         self.model = model
         self.evaluator = Evaluator(self.nclass)
-
+        self.criterion = SegmentationLosses(cuda=True).build_loss(mode='ce')
         # Using cuda
         if self.args.cuda:
             self.model = self.model.cuda()
 
         # Resuming checkpoint
         _,_,_ = load_pretrained_mode(self.model,checkpoint_path=self.args.resume)
-        # if not os.path.isfile(self.args.resume):
-        #     raise RuntimeError("=> no checkpoint found at '{}'" .format(self.args.resume))
-        # checkpoint = torch.load(self.args.resume)
-        # new_state_dict = OrderedDict()
-        # for k,v in checkpoint['state_dict'].items():
-        #     if 'module' in k:
-        #         name = k[7:]
-        #     else:
-        #         name = k
-        #     new_state_dict[name] = v
-        # if self.args.cuda:
-        #     self.model.module.load_state_dict(new_state_dict)
-        # else:
-        #     self.model.load_state_dict(new_state_dict)
-        # print("=> loaded checkpoint '{}' (epoch {})"
-        #         .format(self.args.resume, checkpoint['epoch']))
         
 
     def visual(self):
@@ -123,24 +108,20 @@ class Valuator(object):
         data_dir = self.args.data_dir
         data_list = os.path.join(data_dir,self.args.vis_list)
         vis_set = GenDataset(self.args,data_list,split='vis')
-        vis_loader = DataLoader(vis_set, batch_size=self.args.batch_size, shuffle=False)
+        vis_loader = DataLoader(vis_set, batch_size=1, shuffle=False)
         num_img_tr = len(vis_loader)
-        print('=====>[numImages: %5d]' % (num_img_tr * self.args.batch_size))
+        print('=====>[numImages: %5d]' % (num_img_tr))
         for i, sample in enumerate(vis_loader):
             image, target ,name, ori = sample['image'], sample['label'], sample['name'], sample['ori']
             if self.args.cuda:
                 image, target = image.cuda(), target.cuda()
             with torch.no_grad():
-                if self.args.backbone == 'dbl':
-                    _,output = self.model(image)
-                elif self.args.backbone == 'msc':
-                    output = self.model(image)[0]
-                else:
-                    output = self.model(image)
-            output = torch.nn.functional.interpolate(output,size=target.size()[1:],mode='bilinear',align_corners=True)
+                output = self.model(image)
+                if isinstance(output,(tuple,list)):
+                    output = output[0]
+            output = torch.nn.functional.interpolate(output,size=ori.size()[1:3],mode='bilinear',align_corners=True)
             pred = output.data.cpu().numpy()
             target = target.cpu().numpy()
-            # image = image.cpu().numpy()
             ori = ori.cpu().numpy()
             pred = np.argmax(pred, axis=1)
             if num_img_tr > 100:
@@ -150,8 +131,6 @@ class Valuator(object):
                 self.save_img(ori,target,pred,name)
             # Add batch sample into evaluator
             self.evaluator.add_batch(target, pred)
-            # print('===>Iteration  %d/%d' % (i,num_img_tr))
-            # print('test loss: %.3f' % (test_loss / (i + 1)))
 
         # Fast test during the training
         Acc = self.evaluator.Pixel_Accuracy()
@@ -207,35 +186,8 @@ class Valuator(object):
         return img_add
 
 def main():
-    parser = argparse.ArgumentParser(description="PyTorch vnet Training")
-    parser.add_argument('--backbone',type=str,default=None,help='choose the network') 
-    parser.add_argument('--data_dir',type=str,default=None,
-                        help='path to dataset which add the *.txt is the image path')
-    parser.add_argument('--vis_list',type=str,default=None,help='path to val.txt')
-    parser.add_argument('--normal_mean',type=float, nargs='*',default=[104.008,116.669,122.675])
-    parser.add_argument('--normal_std',type=float,default=1.0)
-    parser.add_argument('--num_classes',type=int,default=None,help='the number of classes')
-    parser.add_argument('--crop_size', type=int, default=None,
-                        help='crop image size')
-    parser.add_argument('--shrink',type=int,default=None)
-    # training hyper params
-    parser.add_argument('--bgr_mode',action='store_true', default=False,help='input image is bgr but rgb')
-    parser.add_argument('--batch_size', type=int, default=None,
-                        metavar='N', help='input batch size for \
-                                training (default: auto)')
-
-    parser.add_argument('--save_dir',type=str,default=None,help='path to save model')
-
-    # cuda, seed and logging
-    parser.add_argument('--no_cuda', action='store_true', default=
-                        False, help='disables CUDA training')
-    # checking point
-    parser.add_argument('--resume', type=str, default=None,
-                        help='put the path to resuming file if needed')
-
-
-    args = parser.parse_args()
-    args.ft = False
+    from utils import parse_args
+    args = parse_args.parse()
     args.cuda = not args.no_cuda and torch.cuda.is_available()    
     print(args)
     valuator = Valuator(args)
