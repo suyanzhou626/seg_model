@@ -57,6 +57,8 @@ class VnetPrun1(nn.Module):
         self.block_parameter = BLOCK_PARAMETER if block_parameter is None else block_parameter
         self.fcblock_parameter = FC_BLOCK if fcblock_parameter is None else fcblock_parameter 
         self.deconv_parameter = DECONV_PARAMETER
+        if args.gray_mode:
+            self.block_parameter[0]['planes'][0] = 1
         self.block1 = Block(**self.block_parameter[0])
         self.block2 = Block(**self.block_parameter[1])
         self.block3 = Block(**self.block_parameter[2])

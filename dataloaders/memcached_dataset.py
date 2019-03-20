@@ -21,7 +21,6 @@ def pil_loader(img_str,bgr_mode=False,gray_mode=False):
     elif gray_mode:
         img = img[:,:,::-1]
         img = cv2.cvtColor(img,cv2.COLOR_RGB2GRAY)
-        img = np.dstack([img,img,img])
     return img
 
 def pil_loader_label(img_str,bgr_mode=False):

@@ -137,7 +137,10 @@ class Hourglass(nn.Module):
         super(Hourglass,self).__init__()
         global BN
         BN = args.batchnorm_function
-        self.entry = conv_bn_relu(3,128,3,pad=1)
+        if args.gray_mode:
+            self.entry = conv_bn_relu(1,128,3,pad=1)
+        else:
+            self.entry = conv_bn_relu(3,128,3,pad=1)
         self.encoderlayer1 = EncoderLayer(**ENCODER1_PARAMETER)
         self.encoderlayer2 = EncoderLayer(**ENCODER2_PARAMETER)
         self.encoderlayer3 = EncoderLayer(**ENCODER3_PARAMETER)

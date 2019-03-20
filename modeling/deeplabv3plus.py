@@ -50,7 +50,7 @@ class DeepLabv3plus(nn.Module):
 		# for m in self.modules():
 		# 	if isinstance(m, nn.Conv2d):
 		# 		nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-		self.backbone = Xception(os=16,BatchNorm=BatchNorm)
+		self.backbone = Xception(os=16,BatchNorm=BatchNorm,gray_mode=args.gray_mode)
 		self.backbone_layers = self.backbone.get_layers()
 		for m in self.modules():
 			classname = m.__class__.__name__

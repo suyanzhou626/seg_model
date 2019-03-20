@@ -58,6 +58,8 @@ class Dbl(nn.Module):
         self.block_parameter = BLOCK_PARAMETER if block_parameter is None else block_parameter
         self.fcblock_parameter = FC_BLOCK if fcblock_parameter is None else fcblock_parameter 
         self.block_parameter[-1]['planes'][0]=3*args.num_classes+self.block_parameter[0]['planes'][-1]
+        if args.gray_mode:
+            self.block_parameter[0]['planes'][0] = 1
         # self.deconv_parameter = DECONV_PARAMETER
         self.block1 = Block(**self.block_parameter[0])
         self.block2 = Block(**self.block_parameter[1])

@@ -100,7 +100,7 @@ class Xception(nn.Module):
     Xception optimized for the ImageNet dataset, as specified in
     https://arxiv.org/pdf/1610.02357.pdf
     """
-    def __init__(self, os,BatchNorm=None):
+    def __init__(self, os,BatchNorm=None,gray_mode=False):
         """ Constructor
         Args:
             num_classes: number of classes
@@ -114,7 +114,10 @@ class Xception(nn.Module):
             stride_list = [2,2,1]
         else:
             raise ValueError('xception.py: output stride=%d is not supported.'%os) 
-        self.conv1 = nn.Conv2d(3, 32, 3, 2, 1, bias=False)
+        if gray_mode:
+            self.conv1 = nn.Conv2d(1,32,3,2,1,bias=False)
+        else:
+            self.conv1 = nn.Conv2d(3, 32, 3, 2, 1, bias=False)
         self.bn1 = BatchNorm(32, momentum=bn_mom)
         self.relu = nn.ReLU(inplace=True)
         
