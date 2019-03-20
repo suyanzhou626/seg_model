@@ -12,6 +12,7 @@ from dataloaders.utils import decode_seg_map_sequence
 from utils.metrics import Evaluator
 from collections import OrderedDict
 from utils.load import load_pretrained_mode
+from utils import post_utils
 class Normalize(object):
     """Normalize a tensor image with mean and standard deviation.
     Args:
@@ -115,9 +116,10 @@ class Valuator(object):
 
         # Resuming checkpoint
         _,_,_ = load_pretrained_mode(self.model,checkpoint_path=self.args.resume)
-    
 
-
+        if self.args.twoframeavg > 0:
+            print('averaging the two frame output mask')
+            self.avgframe = post_utils.AverageFrame(self.args.twoframeavg)
 
     def visual(self,video_path):
         self.model.eval()
@@ -125,8 +127,7 @@ class Valuator(object):
         vis_set = VideoDataset(self.args,video_path)
         fourcc = cv2.VideoWriter_fourcc(*'MJPG') #opencv3.0
         save_name = os.path.join(self.args.save_dir,video_path.split('/')[-1].split('.')[0])
-        # if not os.path.exists(save_name):
-        #     os.mkdir(save_name)
+        os.makedirs(self.args.save_dir,exist_ok=True)
         videoWriter = cv2.VideoWriter(save_name + '.avi', fourcc, float(vis_set.framerate), (vis_set.wid,vis_set.hei))
         vis_loader = DataLoader(vis_set, batch_size=self.args.batch_size, shuffle=False,drop_last=False)
         num_img_tr = len(vis_loader)
@@ -142,10 +143,15 @@ class Valuator(object):
             pred = output.data.cpu().numpy()
             ori = ori.cpu().numpy()
             pred = np.argmax(pred, axis=1)
+            if self.args.twoframeavg > 0:
+                pred[0] = self.avgframe(pred[0])
+            if self.args.blurlevel > 0:
+                pred[0] = post_utils.bluranderode(pred[0],blurlevel=self.args.blurlevel)
             # pred = np.ones(pred.shape) - pred
             label = decode_seg_map_sequence(pred).cpu().numpy().transpose([0,2,3,1])
-            if self.args.bgr_mode:
-                label = label[:,:,:,::-1] # convert to BGR
+            if not self.args.bgr_mode:
+                ori = ori[:,:,:,::-1] # convert to BGR
+            label = label[:,:,:,::-1] # convert to BGR
             pred = np.stack([pred,pred,pred],axis=3)
             ori = ori.astype(dtype=np.uint8)
             label = label.astype(dtype=np.uint8)
@@ -154,8 +160,7 @@ class Valuator(object):
             temp = self.addImage(ori,label)
             temp[pred == 0] = 0
             temp = temp.astype(np.uint8)
-            if not self.args.bgr_mode:
-                temp = temp[:,:,:,::-1]
+            # temp = temp[:,:,:,::-1]
             # cv2.imwrite(os.path.join(save_name,str(i)+'.jpg'),temp[0])
             videoWriter.write(temp[0])
         print('write %d frame' % (i+1))
