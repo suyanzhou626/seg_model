@@ -186,7 +186,7 @@ class Valuator(object):
         return img_add
 
 def main():
-    from .utils import parse_args
+    from utils import parse_args
     args = parse_args.parse()
     args.cuda = not args.no_cuda and torch.cuda.is_available()    
     print(args)

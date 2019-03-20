@@ -27,7 +27,7 @@ class ToCaffe(object):
             pytorch.convert(self.model,[self.args.input_shape],self.args.out_name,input_names=["data"],output_names=["out"])
 
 def main():
-    from .utils import parse_args
+    from utils import parse_args
     args = parse_args.parse()
     print(args)
     tocaffe = ToCaffe(args)

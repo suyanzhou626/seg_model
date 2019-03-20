@@ -258,7 +258,7 @@ class Trainer(object):
             }, is_best)
 
 def main():
-    from .utils import parse_args
+    from utils import parse_args
     args = parse_args.parse()
     if args.test_size is None:
         args.test_size = args.input_size

@@ -169,7 +169,7 @@ class Valuator(object):
         return img_add
 
 def main():
-    from .utils import parse_args
+    from utils import parse_args
     args = parse_args.parse()
     args.batch_size = 1
     args.ft = False
