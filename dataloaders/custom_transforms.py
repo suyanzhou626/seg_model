@@ -21,8 +21,14 @@ class Normalize(object):
         mean (tuple): means for each channel.
         std (tuple): standard deviations for each channel.
     """
-    def __init__(self, mean=(0., 0., 0.),std=1.0):
-        self.mean = mean
+    def __init__(self, mean=(0., 0., 0.),std=1.0,bgr_mode=False,gray_mode=False):
+        if gray_mode:
+            if bgr_mode:
+                self.mean = (mean[2]*299 + mean[1]*587 + mean[0]*114 + 500) // 1000
+            else:
+                self.mean = (mean[0]*299 + mean[1]*587 + mean[2]*114 + 500) // 1000
+        else:
+            self.mean = mean
         self.std = std
     def __call__(self, sample):
         img = sample['image']
@@ -43,7 +49,10 @@ class ToTensor(object):
         # torch image: C X H X W
             if 'image' in key:
                 img = sample[key]
-                img = img.transpose((2, 0, 1)).copy()
+                if len(img.shape) == 2:
+                    img = np.expand_dims(img,axis=0).copy()
+                else:
+                    img = img.transpose((2, 0, 1)).copy()
                 sample[key] = torch.from_numpy(img).float()
             elif 'label' in key:
                 mask = sample[key]
@@ -72,7 +81,7 @@ class RandomRotate(object):
 
     def __call__(self, sample):
         image, segmentation = sample['image'], sample['label']
-        row, col, _ = image.shape
+        row, col = segmentation.shape
         rand_angle = np.random.randint(-self.angle_r, self.angle_r) if self.angle_r != 0 else 0
         m = cv2.getRotationMatrix2D(center=(col/2, row/2), angle=rand_angle, scale=1)
         new_image = cv2.warpAffine(image, m, (col,row), flags=cv2.INTER_CUBIC, borderValue=0)
@@ -94,10 +103,10 @@ class Resize(object):
     
     def __call__(self,sample):
         img = sample['image']
-        h, w ,_ = img.shape
-        scale = min(self.output_size[1]/float(w),self.output_size[0]/float(h))
-        out_w = int(w*scale)
-        out_h = int(h*scale)
+        image_shape = img.shape
+        scale = min(self.output_size[1]/float(image_shape[1]),self.output_size[0]/float(image_shape[0]))
+        out_w = int(image_shape[1]*scale)
+        out_h = int(image_shape[0]*scale)
         out_w = ((out_w - 1 + self.shrink -1) // self.shrink) * self.shrink +1
         out_h = ((out_h - 1 + self.shrink -1) // self.shrink) * self.shrink +1
         key_list = sample.keys()
@@ -106,7 +115,10 @@ class Resize(object):
                 img = sample[key]
                 img = cv2.resize(img, dsize=(out_w,out_h), interpolation=cv2.INTER_CUBIC)
                 if self.pad:
-                    new_img = np.zeros((max(out_h,out_w),max(out_h,out_w),3))
+                    if len(image_shape) == 3:
+                        new_img = np.zeros((max(out_h,out_w),max(out_h,out_w),3))
+                    elif len(image_shape) == 2:
+                        new_img = np.zeros((max(out_h,out_w),max(out_h,out_w)))
                     new_img[0:out_h,0:out_w] = img
                     img = new_img
                 sample[key] = img
@@ -130,7 +142,6 @@ class RandomScale(object):
         img = sample['image']
         mask = sample['label']
         # random scale (short edge)
-        h, w ,_ = img.shape
         rand_scale = random.uniform(self.rand_resize[0], self.rand_resize[1])
         img = cv2.resize(img, None, fx=rand_scale, fy=rand_scale, interpolation=cv2.INTER_CUBIC)
         mask = cv2.resize(mask, None, fx=rand_scale, fy=rand_scale, interpolation=self.seg_interpolation)
@@ -151,9 +162,13 @@ class RandomCrop(object):
     def __call__(self,sample):
         img = sample['image']
         mask = sample['label']
-        h, w ,_ = img.shape
+
+        h, w  = mask.shape
         new_h, new_w = self.crop_size
-        new_img = np.zeros((new_h,new_w,3),dtype=np.float)
+        if len(img.shape) == 3:
+            new_img = np.zeros((new_h,new_w,3),dtype=np.float)
+        elif len(img.shape) == 2:
+            new_img = np.zeros((new_h,new_w),dtype=np.float)
         new_mask = np.zeros((new_h,new_w),dtype=np.float)
         new_mask.fill(255)
         padw = max(0,w-new_w)

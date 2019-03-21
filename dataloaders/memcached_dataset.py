@@ -16,11 +16,10 @@ def pil_loader(img_str,bgr_mode=False,gray_mode=False):
     img = Image.open(buff)
     img = img.convert('RGB')
     img = np.array(img).astype(dtype=np.float32)
-    if bgr_mode:
-        img = img[:,:,::-1]  #convert to BGR
-    elif gray_mode:
-        img = img[:,:,::-1]
+    if gray_mode:
         img = cv2.cvtColor(img,cv2.COLOR_RGB2GRAY)
+    elif bgr_mode:
+        img = img[:,:,::-1]  #convert to BGR
     return img
 
 def pil_loader_label(img_str,bgr_mode=False):
@@ -92,7 +91,7 @@ class McDataset(Dataset):
         temp.append(tr.RandomScale(rand_resize=self.args.rand_resize))
         temp.append(tr.RandomCrop(self.args.input_size))
         temp.append(tr.RandomHorizontalFlip())
-        temp.append(tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std))
+        temp.append(tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std,bgr_mode=self.args.bgr_mode,gray_mode=self.args.gray_mode))
         if self.args.noise_param is not None:
             temp.append(tr.GaussianNoise(mean=self.args.noise_param[0],std=self.args.noise_param[1]))
         temp.append(tr.ToTensor())
@@ -103,7 +102,7 @@ class McDataset(Dataset):
     def transform_val(self, sample):
         composed_transforms = transforms.Compose([
             tr.Resize(self.args.test_size,shrink=self.args.shrink),
-            tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std),
+            tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std,bgr_mode=self.args.bgr_mode,gray_mode=self.args.gray_mode),
             tr.ToTensor()])
 
         return composed_transforms(sample)

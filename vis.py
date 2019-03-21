@@ -44,18 +44,21 @@ class GenDataset(Dataset):
         print('Number of images in {}: {:d}'.format(self._data_list.split('/')[-1], len(self.images)))
 
     def __getitem__(self, index):
-        _img, _target = self._make_img_gt_point_pair(index)
+        _img, _target, _img_rgb = self._make_img_gt_point_pair(index)
         sample = {'image': _img, 'label': _target}
 
         temp =  self.transform_vis(sample)
         temp['name'] = self.images[index].split('/')[-1].split('.')[0]
-        temp['ori'] = torch.from_numpy(np.array(_img))
+        temp['ori'] = torch.from_numpy(np.array(_img_rgb))
         return temp
 
     def _make_img_gt_point_pair(self, index):
         _img = img.open(self.images[index]).convert('RGB')
-        _img = np.array(_img).astype(dtype=np.float32)
-        if self.args.bgr_mode:
+        _img_rgb = np.array(_img).astype(dtype=np.float32)
+        _img = _img_rgb.copy()
+        if self.args.gray_mode:
+            _img = cv2.cvtColor(_img,cv2.COLOR_RGB2GRAY).copy()
+        elif self.args.bgr_mode:
             _img = np.array(_img)[:,:,::-1].copy()  #convert to BGR
         _target = img.open(self.categories[index])
         if (_target.mode != 'L' and _target.mode != 'P'):
@@ -65,12 +68,12 @@ class GenDataset(Dataset):
             else:
                 raise 'error in %s' % self.categories[index]
         _target = np.array(_target).astype(dtype=np.float32)
-        return _img, _target
+        return _img, _target,_img_rgb
 
     def transform_vis(self,sample):
         composed_transforms = transforms.Compose([
             tr.Resize(self.args.test_size,shrink=self.args.shrink),
-            tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std),
+            tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std,bgr_mode=self.args.bgr_mode,gray_mode=self.args.gray_mode),
             tr.ToTensor()
         ])
         return composed_transforms(sample)
@@ -106,7 +109,7 @@ class Valuator(object):
         print('\nvisualizing')
         self.evaluator.reset()
         data_dir = self.args.data_dir
-        data_list = os.path.join(data_dir,self.args.vis_list)
+        data_list = os.path.join(data_dir,self.args.val_list)
         vis_set = GenDataset(self.args,data_list,split='vis')
         vis_loader = DataLoader(vis_set, batch_size=1, shuffle=False)
         num_img_tr = len(vis_loader)
@@ -153,8 +156,6 @@ class Valuator(object):
                 name = str(name)
             save_name = os.path.join(save_dir,name+'.png')
             image = images[i,:,:,:]
-            if self.args.bgr_mode:
-                image = image[:,:,::-1].copy() #convert to RGB
             label_mask = labels[i,:,:,:]
             prediction = predictions[i,:,:,:]
             if image.shape != label_mask.shape:

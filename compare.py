@@ -72,7 +72,7 @@ class GenDataset(Dataset):
     def transform_vis(self,sample):
         composed_transforms = transforms.Compose([
             tr.Resize(self.args.crop_size,shrink=self.args.shrink),
-            tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std),
+            tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std,bgr_mode=self.args.bgr_mode,gray_mode=self.args.gray_mode),
             tr.ToTensor()
         ])
         return composed_transforms(sample)

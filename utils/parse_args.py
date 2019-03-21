@@ -74,6 +74,8 @@ def parse():
 
     #video test necessary params
     parser.add_argument('--test_path',type=str,default=None,help='the dir including video used to test model')
+    parser.add_argument('--blurlevel',type=float,default=0,help='whether use post processing in output mask')
+    parser.add_argument('--twoframeavg',type=float,default=0,help='whether average the pre and curr fram output')
 
     args = parser.parse_args()
     return args
