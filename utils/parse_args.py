@@ -74,8 +74,9 @@ def parse():
 
     #video test necessary params
     parser.add_argument('--test_path',type=str,default=None,help='the dir including video used to test model')
-    parser.add_argument('--blurlevel',type=float,default=0,help='whether use post processing in output mask')
-    parser.add_argument('--twoframeavg',type=float,default=0,help='whether average the pre and curr fram output')
+    parser.add_argument('--blursize',type=int,default=0,help='whether use post processing in output mask')
+    parser.add_argument('--hole_ratio',type=float,default=0,help='whether removing hole')
+    parser.add_argument('--diff_threshold',type=float,default=0,help='whether deflicking')
 
     args = parser.parse_args()
     return args

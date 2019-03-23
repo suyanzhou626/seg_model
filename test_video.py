@@ -36,7 +36,7 @@ class VideoDataset(Dataset):
 
         print('this video({}) has %d frame(%d)'.format(video_path) % (self.framenum,cnt))
     def __getitem__(self, index):
-        _img = self.images[index]
+        _img = self.images[index].astype(dtype=np.float32)
         _img_bgr = _img.copy()
         if self.args.gray_mode:
             _img = cv2.cvtColor(_img,cv2.COLOR_BGR2GRAY).copy()
@@ -74,9 +74,9 @@ class Valuator(object):
         # Resuming checkpoint
         _,_,_ = load_pretrained_mode(self.model,checkpoint_path=self.args.resume)
 
-        if self.args.twoframeavg > 0:
-            print('averaging the two frame output mask')
-            self.avgframe = post_utils.AverageFrame(self.args.twoframeavg)
+        if self.args.diff_threshold > 0:
+            print('using deflicking post process')
+            self.deflicker = post_utils.Deflicker(self.args.diff_threshold)
 
     def visual(self,video_path):
         self.model.eval()
@@ -98,12 +98,15 @@ class Valuator(object):
                     output = output[0]
             output = torch.nn.functional.interpolate(output,size=ori.size()[1:3],mode='bilinear',align_corners=True)
             pred = output.data.cpu().numpy()
+            pred = pred.transpose((0,2,3,1)).copy()
+            if self.args.hole_ratio > 0:
+                pred[0] = post_utils.removehole(pred[0],self.args.hole_ratio)
+            if self.args.diff_threshold > 0:
+                pred[0] = self.deflicker(pred[0])
+            if self.args.blursize > 0:
+                pred[0] = post_utils.blur(pred[0],self.args.blursize)
             ori = ori.cpu().numpy()
-            pred = np.argmax(pred, axis=1)
-            if self.args.twoframeavg > 0:
-                pred[0] = self.avgframe(pred[0])
-            if self.args.blurlevel > 0:
-                pred[0] = post_utils.bluranderode(pred[0],blurlevel=self.args.blurlevel)
+            pred = np.argmax(pred, axis=3)
             # pred = np.ones(pred.shape) - pred
             label = decode_seg_map_sequence(pred).cpu().numpy().transpose([0,2,3,1])
             label = label[:,:,:,::-1] # convert to BGR
