@@ -9,6 +9,7 @@ from .vnet_pruning_1 import VnetPrun1
 from .vnet_pruning_2 import VnetPrun2
 from .vnet_pruning_3 import VnetPrun3
 from .vnet_mloss import VnetMloss
+from .v23g import V23_G
 def generate_net(args):
     if args.backbone == 'deeplabv3plus' or args.backbone == 'deeplabv3+':
         return DeepLabv3plus(args)
@@ -32,5 +33,7 @@ def generate_net(args):
         return VnetPrun3(args)
     elif args.backbone == 'vnetmloss':
         return VnetMloss(args)
+    elif args.backbone == 'v23g':
+        return V23_G(args)
     else:
         raise ValueError('generateNet.py: network %s is not support yet' % args.backbone)
