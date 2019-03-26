@@ -7,7 +7,7 @@ BLOCK_PARAMETER=[{'layers':4,'planes':[3,12,12,12,12],'k_sizes':[7,3,3,3],'strid
                  {'layers':4,'planes':[12,24,24,24,24],'k_sizes':[3,3,3,3],'strides':[2,1,1,1],'pads':[1,1,1,3],'dilations':[1,1,1,3]},
                  {'layers':4,'planes':[24,48,48,48,48],'k_sizes':[3,3,3,3],'strides':[2,1,1,1],'pads':[1,1,1,3],'dilations':[1,1,1,3]},
                  {'layers':4,'planes':[48,96,96,96,96],'k_sizes':[3,3,3,3],'strides':[2,1,1,1],'pads':[1,1,1,3],'dilations':[1,1,1,3]},
-                 {'layers':4,'planes':[96,96,96,96,96],'k_sizes':[3,3,3,3],'strides':[1,1,1,1],'pads':[1,1,1,1],'dilations':[1,1,1,1]}]
+                 {'layers':4,'planes':[96,96,96,96,96],'k_sizes':[3,3,3,3],'strides':[1,1,1,1],'pads':[1,1,1,3],'dilations':[1,1,1,3]}]
 FC_BLOCK={'layers':3,'planes':[48,64,64,64],'k_sizes':[1,1,1],'strides':[1,1,1],'pads':[0,0,0],'dilations':[1,1,1]}
 
 DECONV_PARAMETER=[{'layers':1,'planes':[192,48],'k_sizes':[3],'strides':[1],'pads':[1],'dilations':[1]},
