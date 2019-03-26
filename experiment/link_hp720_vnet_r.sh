@@ -5,7 +5,7 @@ SAVE_DIR=/mnt/lustre/wuyao/Data/segmentation_pytorch_model/humanparse_720
 DATASET=renren
 TRAIN_LIST=/mnt/lustre/wuyao/dataset_list/humanparse_720/${DATASET}_train.txt
 VAL_LIST=/mnt/lustre/wuyao/dataset_list/humanparse_720/${DATASET}_val.txt 
-BACKBONE=vnet3_360
+BACKBONE=vnet
 CROP_SIZE=513
 TEST_SIZE=720
 NUM_CLASSES=2
@@ -37,7 +37,7 @@ srun --partition=$part --mpi=pmi2 --gres=gpu:8 --ntasks-per-node=8 -n8 --job-nam
 --data_dir $DATA_DIR \
 --train_list $TRAIN_LIST \
 --val_list $VAL_LIST \
---crop_size $CROP_SIZE \
+--input_size $CROP_SIZE \
 --test_size $TEST_SIZE \
 --num_classes $NUM_CLASSES \
 --epochs $EPOCH \
@@ -45,4 +45,5 @@ srun --partition=$part --mpi=pmi2 --gres=gpu:8 --ntasks-per-node=8 -n8 --job-nam
 --save_dir $SAVE_DIR \
 --lr $LR \
 --shrink $SHRINK \
+--bgr_mode \
 2>&1|tee $LOGNAME

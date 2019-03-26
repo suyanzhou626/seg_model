@@ -5,7 +5,7 @@ SAVE_DIR=/mnt/lustre/wuyao/Data/segmentation_pytorch_model/multiclass_481
 DATASET=all
 TRAIN_LIST=/mnt/lustre/wuyao/dataset_list/multiclass/${DATASET}_train.txt
 VAL_LIST=/mnt/lustre/wuyao/dataset_list/multiclass/${DATASET}_val.txt 
-BACKBONE=deeplab
+BACKBONE=deeplabv3plus
 CROP_SIZE=289
 TEST_SIZE=481
 NUM_CLASSES=15
@@ -23,21 +23,21 @@ MOMENTUM=0.8
 WEIGHT_DECAY=0.001
 RESUME=$SAVE_DIR/$DATASET/$BACKBONE/experiment_0/checkpoint.pth.tar
 
-JOBNAME=m_dl_all
+JOBNAME=m_dpv3+_all
 LOG_DIR=$SAVE_DIR/$DATASET/$BACKBONE/log
 mkdir -p $LOG_DIR
 part=HA_senseAR
 now=$(date +"i%Y%m%d_%H%M%S")
 LOGNAME=$LOG_DIR/train-$LR-$BATCH_SIZE-$EPOCH-$CROP_SIZE-$TEST_SIZE-$now.log
 
-srun --partition=$part --mpi=pmi2 --gres=gpu:8 --ntasks-per-node=8 -n8 --job-name=$JOBNAME python \
+srun --partition=$part --mpi=pmi2 --gres=gpu:8 --ntasks-per-node=8 -n8 --job-name=$JOBNAME -x SH-IDC1-10-5-36-191 python \
 -u $EXECUTE_DIR \
 --backbone $BACKBONE \
 --dataset $DATASET \
 --data_dir $DATA_DIR \
 --train_list $TRAIN_LIST \
 --val_list $VAL_LIST \
---crop_size $CROP_SIZE \
+--input_size $CROP_SIZE \
 --test_size $TEST_SIZE \
 --num_classes $NUM_CLASSES \
 --epochs $EPOCH \
@@ -45,5 +45,5 @@ srun --partition=$part --mpi=pmi2 --gres=gpu:8 --ntasks-per-node=8 -n8 --job-nam
 --save_dir $SAVE_DIR \
 --lr $LR \
 --shrink $SHRINK \
---resume $RESUME \
+--bgr_mode \
 2>&1|tee $LOGNAME

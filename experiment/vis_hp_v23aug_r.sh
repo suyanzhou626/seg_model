@@ -1,4 +1,4 @@
-EXECUTE_DIR=/mnt/lustre/wuyao/seg_model/vis.py
+EXECUTE_DIR=/mnt/lustre/wuyao/seg_model2/vis.py
 
 DATA_DIR=/mnt/lustre/wuyao/Data/segmentation_data/humanparse_seg/human_parse_257
 DATASETVAL=zhibo
@@ -30,4 +30,5 @@ srun --partition=$part --mpi=pmi2 --gres=gpu:1 --ntasks-per-node=1 -n1 --job-nam
 --resume $RESUME \
 --crop_size $CROP_SIZE \
 --shrink $SHRINK \
+--bgr_mode \
 2>&1|tee $LOG_DIR/vis-$now.log

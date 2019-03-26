@@ -1,13 +1,13 @@
 EXECUTE_DIR=/mnt/lustre/wuyao/seg_model/tocaffe.py
 
 DATASETTRAIN=zsrohf
-BACKBONE=v23_4x
+BACKBONE=vnet
 EXPERIMENT=experiment_0
 NUM_CLASSES=2
 INPUT_SHAPE_CHA=3
 INPUT_SHAPE_HEIGHT=257
 INPUT_SHAPE_WIDTH=257
-MODEL_NAME=M_Segment_V23_Hair_${DATASETTRAIN}_$EXPERIMENT
+MODEL_NAME=M_Segment_VNet_Hair_${DATASETTRAIN}_$EXPERIMENT
 
 SAVE_DIR=/mnt/lustre/wuyao/Data/tocaffe_model/$MODEL_NAME/cnn
 RESUME=/mnt/lustre/wuyao/Data/segmentation_pytorch_model/hair_seg/$DATASETTRAIN/$BACKBONE/$EXPERIMENT/best.pth.tar

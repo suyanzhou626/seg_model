@@ -1,7 +1,7 @@
-EXECUTE_DIR=/mnt/lustre/wuyao/seg_model/link_train.py
+EXECUTE_DIR=/mnt/lustre/wuyao/seg_model2/link_train.py
 
 DATA_DIR=/mnt/lustre/wuyao/Data/segmentation_data/hair_seg/
-SAVE_DIR=/mnt/lustre/wuyao/Data/segmentation_pytorch_model/hair_seg
+SAVE_DIR=/mnt/lustre/wuyao/Data/segmentation_pytorch_model/hair_seg_test
 DATASET=zsrohf
 TRAIN_LIST=/mnt/lustre/wuyao/dataset_list/hair/${DATASET}_train.txt
 VAL_LIST=/mnt/lustre/wuyao/dataset_list/hair/${DATASET}_val.txt 
@@ -37,7 +37,7 @@ srun --partition=$part --mpi=pmi2 --gres=gpu:8 --ntasks-per-node=8 -n8 --job-nam
 --data_dir $DATA_DIR \
 --train_list $TRAIN_LIST \
 --val_list $VAL_LIST \
---crop_size $CROP_SIZE \
+--input_size $CROP_SIZE \
 --test_size $TEST_SIZE \
 --num_classes $NUM_CLASSES \
 --epochs $EPOCH \

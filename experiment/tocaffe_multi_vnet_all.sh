@@ -1,13 +1,13 @@
 EXECUTE_DIR=/mnt/lustre/wuyao/seg_model/tocaffe.py
 
 DATASETTRAIN=all
-BACKBONE=vnet3_360
+BACKBONE=vnetprun3
 EXPERIMENT=experiment_0
 NUM_CLASSES=15
 INPUT_SHAPE_CHA=3
 INPUT_SHAPE_HEIGHT=481
 INPUT_SHAPE_WIDTH=481
-MODEL_NAME=M_Segment_VNet_Multi_${DATASETTRAIN}_$EXPERIMENT
+MODEL_NAME=M_Segment_VNetprun3_Multi_${DATASETTRAIN}_$EXPERIMENT
 
 SAVE_DIR=/mnt/lustre/wuyao/Data/tocaffe_model/$MODEL_NAME/cnn
 RESUME=/mnt/lustre/wuyao/Data/segmentation_pytorch_model/multiclass_481/$DATASETTRAIN/$BACKBONE/$EXPERIMENT/best.pth.tar

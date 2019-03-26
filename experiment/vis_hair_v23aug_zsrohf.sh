@@ -1,7 +1,7 @@
 EXECUTE_DIR=/mnt/lustre/wuyao/seg_model/vis.py
 
 DATA_DIR=/mnt/lustre/wuyao/Data/segmentation_data/hair_seg/
-DATASETVAL=frontpose
+DATASETVAL=zsrohf
 DATASETTRAIN=zsrohf
 BACKBONE=v23aug
 EXPERIMENT=experiment_0
@@ -30,4 +30,5 @@ srun --partition=$part --mpi=pmi2 --gres=gpu:1 --ntasks-per-node=1 -n1 --job-nam
 --resume $RESUME \
 --crop_size $CROP_SIZE \
 --shrink $SHRINK \
+--bgr_mode \
 2>&1|tee $LOG_DIR/vis-$now.log
