@@ -4,9 +4,9 @@ from collections import OrderedDict
 from .nn.conv import Conv2d_Max as Conv2d
 BN = None
 BLOCK_PARAMETER=[{'layers':4,'planes':[3,12,12,12,12],'k_sizes':[7,3,3,3],'strides':[4,1,1,1],'pads':[3,1,1,3],'dilations':[1,1,1,3]},
-                 {'layers':4,'planes':[12,24,24,24,24],'k_sizes':[3,3,3,3],'strides':[2,1,1,1],'pads':[1,1,1,6],'dilations':[1,1,1,6]},
-                 {'layers':4,'planes':[24,48,48,48,48],'k_sizes':[3,3,3,3],'strides':[2,1,1,1],'pads':[1,1,1,12],'dilations':[1,1,1,12]},
-                 {'layers':4,'planes':[48,96,96,96,96],'k_sizes':[3,3,3,3],'strides':[2,1,1,1],'pads':[1,1,1,18],'dilations':[1,1,1,18]},
+                 {'layers':4,'planes':[12,24,24,24,24],'k_sizes':[3,3,3,3],'strides':[2,1,1,1],'pads':[1,1,1,3],'dilations':[1,1,1,3]},
+                 {'layers':4,'planes':[24,48,48,48,48],'k_sizes':[3,3,3,3],'strides':[2,1,1,1],'pads':[1,1,1,3],'dilations':[1,1,1,3]},
+                 {'layers':4,'planes':[48,96,96,96,96],'k_sizes':[3,3,3,3],'strides':[2,1,1,1],'pads':[1,1,1,3],'dilations':[1,1,1,3]},
                  {'layers':4,'planes':[96,96,96,96,96],'k_sizes':[3,3,3,3],'strides':[1,1,1,1],'pads':[1,1,1,1],'dilations':[1,1,1,1]}]
 FC_BLOCK={'layers':3,'planes':[48,64,64,64],'k_sizes':[1,1,1],'strides':[1,1,1],'pads':[0,0,0],'dilations':[1,1,1]}
 
