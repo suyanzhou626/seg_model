@@ -12,7 +12,7 @@ from modeling.sync_batchnorm.replicate import patch_replication_callback
 from dataloaders.utils import decode_seg_map_sequence
 from modeling.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
 from utils.metrics import Evaluator
-from collections import OrderedDi
+from collections import OrderedDict
 class GenDataset(Dataset):
     def __init__(self,args,data_list,split='train'):
         super().__init__()
