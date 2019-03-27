@@ -13,50 +13,7 @@ from utils.metrics import Evaluator
 from collections import OrderedDict
 from utils.load import load_pretrained_mode
 from utils import post_utils
-class Normalize(object):
-    """Normalize a tensor image with mean and standard deviation.
-    Args:
-        mean (tuple): means for each channel.
-        std (tuple): standard deviations for each channel.
-    """
-    def __init__(self, mean=(0., 0., 0.),std=1.0):
-        self.mean = mean
-        self.std = std
-    def __call__(self, img):
-        img = np.array(img).astype(np.float32)
-        img -= self.mean
-        img /= self.std
-
-        return img
-class Resize(object):
-    def __init__(self,target_size,shrink=16):
-        self.size = target_size[0] if isinstance(target_size,list) else target_size
-        self.shrink = shrink
-    
-    def __call__(self,img):
-        w, h = img.size
-        scale = min(self.size/float(w),self.size/float(h))
-        out_w = int(w*scale)
-        out_h = int(h*scale)
-        out_w = ((out_w - 1 + self.shrink -1) // self.shrink) * self.shrink +1
-        out_h = ((out_h - 1 + self.shrink -1) // self.shrink) * self.shrink +1
-        img = img.resize((out_w,out_h),Image.BILINEAR)
-
-        return {'image': img,
-                'ow':w,'oh':h}
-class ToTensor(object):
-    """Convert ndarrays in sample to Tensors."""
-
-    def __call__(self, img):
-        # swap color axis because
-        # numpy image: H x W x C
-        # torch image: C X H X W
-        img = np.array(img).astype(np.float32).transpose((2, 0, 1))
-
-        img = torch.from_numpy(img).float()
-
-        return img
-
+from dataloaders import custom_transforms as tr
 
 class VideoDataset(Dataset):
     def __init__(self,args,video_path):
@@ -79,25 +36,25 @@ class VideoDataset(Dataset):
 
         print('this video({}) has %d frame(%d)'.format(video_path) % (self.framenum,cnt))
     def __getitem__(self, index):
-        _img = self.images[index]
-        if not self.args.bgr_mode:
+        _img = self.images[index].astype(dtype=np.float32)
+        _img_bgr = _img.copy()
+        if self.args.gray_mode:
+            _img = cv2.cvtColor(_img,cv2.COLOR_BGR2GRAY).copy()
+        elif not self.args.bgr_mode:
             _img = _img[:,:,::-1].copy()
-        temp = Image.fromarray(_img,mode='RGB')
+        sample = {'image':_img}
         
-        input_image = self.transform_val(temp)
-        _img = torch.from_numpy(_img)
-        sample = {'input':input_image['image'],'ori':_img,'ow':input_image['ow'],'oh':input_image['oh']}
+        sample = self.transform_val(sample)
+        sample['ori'] = torch.from_numpy(np.array(_img_bgr))
         return sample
 
     def transform_val(self, sample):
-        pre_trans = Resize(self.args.test_size)
-        temp = pre_trans(sample)
         composed_transforms = transforms.Compose([
-            Normalize(mean=self.args.normal_mean,std=self.args.normal_std),
-            ToTensor()
+            tr.Resize(self.args.test_size,shrink=self.args.shrink),
+            tr.Normalize(mean=self.args.normal_mean,std=self.args.normal_std,bgr_mode=self.args.bgr_mode,gray_mode=self.args.gray_mode),
+            tr.ToTensor()
         ])
-        res = composed_transforms(temp['image'])
-        return {'image':res,'ow':temp['ow'],'oh':temp['oh']}
+        return composed_transforms(sample)
 
     def __len__(self):
         return self.framenum
@@ -117,9 +74,9 @@ class Valuator(object):
         # Resuming checkpoint
         _,_,_ = load_pretrained_mode(self.model,checkpoint_path=self.args.resume)
 
-        if self.args.twoframeavg > 0:
-            print('averaging the two frame output mask')
-            self.avgframe = post_utils.AverageFrame(self.args.twoframeavg)
+        if self.args.diff_threshold > 0:
+            print('using deflicking post process')
+            self.deflicker = post_utils.Deflicker(self.args.diff_threshold)
 
     def visual(self,video_path):
         self.model.eval()
@@ -133,7 +90,7 @@ class Valuator(object):
         num_img_tr = len(vis_loader)
         print('=====>[frames: %5d]' % (num_img_tr * self.args.batch_size))
         for i, sample in enumerate(vis_loader):
-            image, ori, ow,oh = sample['input'],sample['ori'],sample['ow'], sample['oh']
+            image, ori = sample['image'],sample['ori']
             image = image.cuda()
             with torch.no_grad():
                 output = self.model(image)
@@ -141,16 +98,17 @@ class Valuator(object):
                     output = output[0]
             output = torch.nn.functional.interpolate(output,size=ori.size()[1:3],mode='bilinear',align_corners=True)
             pred = output.data.cpu().numpy()
+            pred = pred.transpose((0,2,3,1)).copy()
+            if self.args.hole_ratio > 0:
+                pred[0] = post_utils.removehole(pred[0],self.args.hole_ratio)
+            if self.args.diff_threshold > 0:
+                pred[0] = self.deflicker(pred[0])
+            if self.args.blursize > 0:
+                pred[0] = post_utils.blur(pred[0],self.args.blursize)
             ori = ori.cpu().numpy()
-            pred = np.argmax(pred, axis=1)
-            if self.args.twoframeavg > 0:
-                pred[0] = self.avgframe(pred[0])
-            if self.args.blurlevel > 0:
-                pred[0] = post_utils.bluranderode(pred[0],blurlevel=self.args.blurlevel)
+            pred = np.argmax(pred, axis=3)
             # pred = np.ones(pred.shape) - pred
             label = decode_seg_map_sequence(pred).cpu().numpy().transpose([0,2,3,1])
-            if not self.args.bgr_mode:
-                ori = ori[:,:,:,::-1] # convert to BGR
             label = label[:,:,:,::-1] # convert to BGR
             pred = np.stack([pred,pred,pred],axis=3)
             ori = ori.astype(dtype=np.uint8)
