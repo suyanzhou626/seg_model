@@ -200,9 +200,9 @@ def main():
     args = parse_args.parse()
     if args.test_size is None:
         args.test_size = args.input_size
-    args.sync_bn = True
-    args.cuda = True
+    args.cuda = not args.no_cuda
     args.gpus = torch.cuda.device_count()
+    args.sync_bn = args.cuda and args.gpus > 1
     torch.manual_seed(args.seed)
     trainer = Trainer(args)
     print('Starting Epoch:', trainer.args.start_epoch)
