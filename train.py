@@ -144,7 +144,7 @@ class Trainer(object):
         (epoch, num_img_tr * self.args.batch_size,stop_time-start_time))
         print("Loss: %.3f  Acc: %.4f,  Acc_class: %.4f,  mIoU: %.4f,  fwIoU: %.4f\n\n" % (train_loss/(num_img_tr),
                 Acc_train_epoch, Acc_class_train_epoch, mIoU_train_epoch, FWIoU_train_epoch))
-            print("IoU per class: ",IoU_train_epoch)
+        print("IoU per class: ",IoU_train_epoch)
 
 
     def validation(self, epoch):
@@ -200,6 +200,9 @@ def main():
     args = parse_args.parse()
     if args.test_size is None:
         args.test_size = args.input_size
+    args.sync_bn = True
+    args.cuda = True
+    args.gpus = torch.cuda.device_count()
     torch.manual_seed(args.seed)
     trainer = Trainer(args)
     print('Starting Epoch:', trainer.args.start_epoch)
