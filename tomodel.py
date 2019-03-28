@@ -23,6 +23,7 @@ class ToModel(object):
 
     def convert(self):
         torch.save(self.model,self.args.out_name)
+        #torch.save(self.model.state_dict(),self.args.out_name)
 
 def main():
     from utils import parse_args
