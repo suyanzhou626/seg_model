@@ -100,14 +100,16 @@ def json2dir(dir_json,dir_out,mode,config_path):
                 if temp_shape in label_index:
                     xy = list(map(tuple,shape['points']))
                     drawPolygonWithBorder(draw, xy, mask_value, border_value)
+                    break
                     # draw.polygon(xy,fill = mask_value)
                 elif shape['label'] == '255ignore':
                     xy = list(map(tuple,shape['points']))     
-                    draw.polygon(xy,fill = 255)      
+                    draw.polygon(xy,fill = 255)
+                    break      
         mask_array = np.array(mask)
-        assert(1<=len(np.unique(mask_array))<=25)
+        assert(1<=len(np.unique(mask_array))<=border_value+1)
         array_max = np.max(mask_array)
-        if 1<= array_max <= 25 or (array_max==255 and len(np.unique(mask_array)) >= 3):
+        if 1<= array_max <= border_value+1 or (array_max==255 and len(np.unique(mask_array)) >= 3):
             color_mask = img.fromarray(np.uint8(colormap[np.array(mask,dtype=np.uint8)]))
             image.save(save_image_name)
             mask = mask.resize(target_size)
