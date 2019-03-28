@@ -10,10 +10,10 @@ parser = argparse.ArgumentParser(description = 'Process json to png')
 parser.add_argument('--read_path',type=str,help='set the dirname to be processed in rawdata_dir',nargs='?',default=None)
 parser.add_argument('--out_path',type=str,help='set the dirname to save trainset and valset')
 parser.add_argument('--aug_times',type=int,nargs='?',default=0,help='set the factor os data augment')
-parser.add_argument('--mode',type=str,help='set how to produce the label: leftfront,rightbehind ..',
-                        choices=['rightfront','rightbehind','behind','right','front','d01','d02','d05'])
+parser.add_argument('--mode',type=str,help='set how to produce the label: leftfront,rightbehind ..')
 parser.add_argument('--need_zoom',type=str,nargs='?',default='no')
 parser.add_argument('--extra_path',type=str,nargs='?',help='set the dataset to be merged to read_path',default=None)
+parser.add_argument('--config',type=str,default=None)
 
 args = parser.parse_args()
 
@@ -27,7 +27,7 @@ if dir_json2dir_in == None:
     print('do not process json')
     dir_seg_in = args.out_path
 else:
-    json2dir(dir_json2dir_in,dir_seg_in,mode)
+    json2dir(dir_json2dir_in,dir_seg_in,mode,args.config)
     if extra_dir_in == None:
         print('do not merge mutil dataset')
     else:

@@ -8,3 +8,4 @@ python -u json_pre.py \
 --aug_times $AUG_TIMES \
 --mode $MODE \
 --read_path $ORIGIN_DIR \
+--config $CONFIG \
