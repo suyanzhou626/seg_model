@@ -75,8 +75,16 @@ def json2dir(dir_json,dir_out,mode,config_path):
             print('     generate the label, %d/%d' % (count,len(fns)))
         
         json_file = os.path.join(dirname,i)
-        data = json.load(open(json_file))
-        image = utils.img_b64_to_arr(data['imageData'])
+        try:
+            data = json.load(open(json_file))
+        except:
+            discard += 1
+            continue
+        try:
+            image = utils.img_b64_to_arr(data['imageData'])
+        except:
+            discard += 1
+            continue
         image = img.fromarray(image.astype(np.uint8),mode="RGB")
         img_shape = (image.size[1],image.size[0])
         scale = 600.00/float(max(image.size[1],image.size[0]))
@@ -99,7 +107,7 @@ def json2dir(dir_json,dir_out,mode,config_path):
             for mask_value,label_index in labels.items():
                 if temp_shape in label_index:
                     xy = list(map(tuple,shape['points']))
-                    drawPolygonWithBorder(draw, xy, mask_value, border_value)
+                    drawPolygonWithBorder(draw, xy, int(mask_value), border_value)
                     break
                     # draw.polygon(xy,fill = mask_value)
                 elif shape['label'] == '255ignore':
