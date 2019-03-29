@@ -1,11 +1,11 @@
-EXECUTE_DIR=/mnt/lustre/wuyao/seg_model/link_train.py
+EXECUTE_DIR=/mnt/lustre/wuyao/seg_model/train.py
 
 DATA_DIR=/mnt/lustre/wuyao/Data/segmentation_data/humanparse_seg/human_parse_257
 SAVE_DIR=/mnt/lustre/wuyao/Data/segmentation_pytorch_model/humanparse_257
 DATASET=renren
 TRAIN_LIST=/mnt/lustre/wuyao/dataset_list/humanparse_257/${DATASET}_train.txt
 VAL_LIST=/mnt/lustre/wuyao/dataset_list/humanparse_257/${DATASET}_val.txt 
-BACKBONE=v23_4x
+BACKBONE=v23
 CROP_SIZE=225
 TEST_SIZE=257
 NUM_CLASSES=2
