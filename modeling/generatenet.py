@@ -1,7 +1,7 @@
 from .deeplabv3plus import DeepLabv3plus
 from .dbl import Dbl
 from .hourglass import Hourglass
-from .msc import MSC
+from .vp3_deconv import VnetPrun3_deconv
 from .v23 import V23_4x
 from .v23_aug import V23_aug
 from .vnet3_360 import Vnet3_360
@@ -18,8 +18,8 @@ def generate_net(args):
         return Dbl(args)
     elif args.backbone == 'hourglass':
         return Hourglass(args)
-    elif args.backbone == 'msc':
-        return MSC(args)
+    elif args.backbone == 'vp3_deconv':
+        return VnetPrun3_deconv(args)
     elif args.backbone == 'v23':
         return V23_4x(args)
     elif args.backbone == 'v23aug':
